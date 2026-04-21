@@ -25,4 +25,5 @@ def ensure_storage_dirs() -> None:
     settings = get_settings()
     upload_path = Path(settings.upload_dir)
     upload_path.mkdir(parents=True, exist_ok=True)
+    (upload_path / "profiles").mkdir(parents=True, exist_ok=True)
     Path("./data").mkdir(parents=True, exist_ok=True)

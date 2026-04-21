@@ -3,6 +3,7 @@ export interface User {
   name: string;
   email: string;
   preferred_difficulty: string;
+  profile_image_url?: string | null;
   created_at: string;
 }
 

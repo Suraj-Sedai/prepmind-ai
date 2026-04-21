@@ -14,9 +14,16 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
     preferred_difficulty: Mapped[str] = mapped_column(String(32), default="medium")
+    profile_image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     documents = relationship("Document", back_populates="user", cascade="all, delete-orphan")
     topic_masteries = relationship("TopicMastery", back_populates="user", cascade="all, delete-orphan")
     quiz_attempts = relationship("QuizAttempt", back_populates="user", cascade="all, delete-orphan")
     flashcards = relationship("Flashcard", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def profile_image_url(self) -> str | None:
+        if not self.profile_image_path:
+            return None
+        return f"/media/{self.profile_image_path}"

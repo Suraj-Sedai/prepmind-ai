@@ -78,6 +78,23 @@ export function logoutUser() {
   });
 }
 
+export function uploadProfileImage(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return request<AuthResponse>("/api/auth/profile-image", {
+    method: "POST",
+    body: formData,
+  });
+}
+
+export function updateProfile(payload: { name: string; preferred_difficulty: "easy" | "medium" | "hard" }) {
+  return request<AuthResponse>("/api/auth/profile", {
+    method: "PATCH",
+    body: JSON.stringify(payload),
+  });
+}
+
 export function fetchDashboard() {
   return request<DashboardResponse>("/api/dashboard");
 }
