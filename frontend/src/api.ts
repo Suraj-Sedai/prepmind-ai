@@ -3,8 +3,20 @@ import type {
   AuthPayload,
   AuthResponse,
   DashboardResponse,
+  DeleteDocumentResponse,
   DocumentListResponse,
+  ExamStartRequest,
+  ExamStartResponse,
+  ExamSubmitResponse,
+  FlashcardGenerateRequest,
+  FlashcardGenerateResponse,
+  FlashcardItem,
+  FlashcardListResponse,
   ProgressResponse,
+  QuizAnswerSubmission,
+  QuizGenerateRequest,
+  QuizGenerateResponse,
+  QuizSubmitResponse,
   RecommendationItem,
   SessionState,
   UploadResponse,
@@ -31,7 +43,6 @@ async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise
         message = text;
       }
     }
-
     throw new Error(message);
   }
 
@@ -75,6 +86,12 @@ export function fetchDocuments() {
   return request<DocumentListResponse>("/api/documents");
 }
 
+export function deleteDocument(documentId: number) {
+  return request<DeleteDocumentResponse>(`/api/documents/${documentId}`, {
+    method: "DELETE",
+  });
+}
+
 export function fetchProgress() {
   return request<ProgressResponse>("/api/progress");
 }
@@ -90,13 +107,61 @@ export function askQuestion(question: string) {
   });
 }
 
-export function uploadDocument(file: File, courseName: string) {
+export function uploadDocument(file: File, courseName: string, replaceExisting = false) {
   const formData = new FormData();
   formData.append("course_name", courseName);
+  formData.append("replace_existing", String(replaceExisting));
   formData.append("file", file);
 
   return request<UploadResponse>("/api/documents/upload", {
     method: "POST",
     body: formData,
+  });
+}
+
+export function fetchFlashcards(topic?: string) {
+  const suffix = topic ? `?topic=${encodeURIComponent(topic)}` : "";
+  return request<FlashcardListResponse>(`/api/flashcards${suffix}`);
+}
+
+export function generateFlashcards(payload: FlashcardGenerateRequest) {
+  return request<FlashcardGenerateResponse>("/api/flashcards/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function rateFlashcard(flashcardId: number, rating: "easy" | "medium" | "hard") {
+  return request<FlashcardItem>(`/api/flashcards/${flashcardId}/rate`, {
+    method: "POST",
+    body: JSON.stringify({ rating }),
+  });
+}
+
+export function generateQuiz(payload: QuizGenerateRequest) {
+  return request<QuizGenerateResponse>("/api/quiz/generate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitQuiz(answers: QuizAnswerSubmission[]) {
+  return request<QuizSubmitResponse>("/api/quiz/submit", {
+    method: "POST",
+    body: JSON.stringify({ answers }),
+  });
+}
+
+export function startExam(payload: ExamStartRequest) {
+  return request<ExamStartResponse>("/api/exam/start", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function submitExam(answers: QuizAnswerSubmission[], durationMinutes: number) {
+  return request<ExamSubmitResponse>("/api/exam/submit", {
+    method: "POST",
+    body: JSON.stringify({ answers, duration_minutes: durationMinutes }),
   });
 }

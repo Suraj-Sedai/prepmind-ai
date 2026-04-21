@@ -11,6 +11,7 @@ from app.api.health import router as health_router
 from app.api.study import router as study_router
 from app.core.config import get_settings
 from app.db.base import Base
+from app.db.bootstrap import ensure_runtime_schema
 from app.db.session import engine
 from app.models import document, study, user  # noqa: F401
 
@@ -21,6 +22,7 @@ settings = get_settings()
 async def lifespan(_: FastAPI):
     ensure_storage_dirs()
     Base.metadata.create_all(bind=engine)
+    ensure_runtime_schema(engine)
     yield
 
 

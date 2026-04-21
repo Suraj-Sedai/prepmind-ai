@@ -11,6 +11,10 @@ class DocumentRead(BaseModel):
     course_name: str
     processing_status: str
     chunk_count: int
+    file_size_bytes: int
+    extracted_word_count: int
+    topic_summary: str
+    error_message: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -23,3 +27,8 @@ class UploadResponse(BaseModel):
     message: str
     document: DocumentRead
     topics_detected: list[str]
+
+
+class DeleteDocumentResponse(BaseModel):
+    message: str
+    document_id: int

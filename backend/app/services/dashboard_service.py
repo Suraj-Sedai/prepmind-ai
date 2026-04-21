@@ -1,10 +1,10 @@
 from datetime import datetime, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import Float, func, select
 from sqlalchemy.orm import Session
 
 from app.models.document import Document, DocumentChunk
-from app.models.study import TopicMastery
+from app.models.study import Flashcard, QuizAttempt, TopicMastery
 from app.schemas.study import (
     DashboardResponse,
     DashboardStat,
@@ -62,6 +62,13 @@ def build_dashboard(db: Session, user_id: int) -> DashboardResponse:
         .join(Document, Document.id == DocumentChunk.document_id)
         .where(Document.user_id == user_id)
     ) or 0
+    quiz_accuracy = db.scalar(
+        select(func.avg(func.cast(QuizAttempt.is_correct, Float)))
+        .where(QuizAttempt.user_id == user_id)
+    )
+    flashcard_total = db.scalar(
+        select(func.count(Flashcard.id)).where(Flashcard.user_id == user_id)
+    ) or 0
 
     readiness = 0.0
     if topic_rows:
@@ -72,6 +79,12 @@ def build_dashboard(db: Session, user_id: int) -> DashboardResponse:
         DashboardStat(label="Chunks Indexed", value=str(chunk_total), tone="info"),
         DashboardStat(label="Tracked Topics", value=str(len(topic_rows)), tone="neutral"),
         DashboardStat(label="Readiness", value=f"{round(readiness)}%", tone="accent"),
+        DashboardStat(
+            label="Quiz Accuracy",
+            value=f"{round((quiz_accuracy or 0) * 100)}%",
+            tone="success",
+        ),
+        DashboardStat(label="Flashcards", value=str(flashcard_total), tone="info"),
     ]
 
     return DashboardResponse(
@@ -108,10 +121,19 @@ def build_progress(db: Session, user_id: int) -> ProgressResponse:
 
     streak_cutoff = datetime.utcnow() - timedelta(days=7)
     streak_days = sum(1 for topic in topic_rows if topic.last_reviewed >= streak_cutoff)
+    quiz_accuracy = db.scalar(
+        select(func.avg(func.cast(QuizAttempt.is_correct, Float)))
+        .where(QuizAttempt.user_id == user_id)
+    ) or 0.0
+    flashcard_coverage = db.scalar(
+        select(func.count(Flashcard.id)).where(Flashcard.user_id == user_id)
+    ) or 0
 
     return ProgressResponse(
         readiness_score=readiness,
         study_streak_days=streak_days,
         topic_mastery=_topic_items(topic_rows),
         recent_activity=recent_activity,
+        quiz_accuracy=round(quiz_accuracy * 100, 1),
+        flashcard_coverage=flashcard_coverage,
     )

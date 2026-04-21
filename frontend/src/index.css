@@ -1,21 +1,69 @@
-@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Source+Serif+4:wght@600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Source+Serif+4:wght@600;700&display=swap");
 
 :root {
-  font-family: "Space Grotesk", "Segoe UI", sans-serif;
+  font-family: "Outfit", "Segoe UI", sans-serif;
   line-height: 1.5;
-  font-weight: 400;
-  color: #f4f1ea;
-  background:
-    radial-gradient(circle at top, rgba(255, 171, 85, 0.12), transparent 34%),
-    linear-gradient(180deg, #0a1020 0%, #111b34 46%, #0c1222 100%);
+  font-weight: 500;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  --text-main: #f4f1ea;
-  --text-muted: rgba(244, 241, 234, 0.7);
-  --accent-warm: #ffb15c;
-  --accent-cool: #8bd8ff;
+  --shadow-soft: 0 22px 60px rgba(15, 33, 56, 0.12);
+}
+
+:root,
+:root[data-theme="light"] {
+  color-scheme: light;
+  --page-bg: #eef3f9;
+  --page-gradient:
+    radial-gradient(circle at top left, rgba(69, 123, 255, 0.12), transparent 26%),
+    radial-gradient(circle at top right, rgba(18, 202, 174, 0.1), transparent 22%),
+    linear-gradient(180deg, #f8fbff 0%, #eef3f9 100%);
+  --surface: rgba(255, 255, 255, 0.82);
+  --surface-subtle: rgba(248, 251, 255, 0.92);
+  --surface-raised: rgba(255, 255, 255, 0.98);
+  --input-bg: rgba(255, 255, 255, 0.96);
+  --border: rgba(23, 44, 73, 0.1);
+  --border-strong: rgba(45, 74, 116, 0.16);
+  --text-primary: #10233d;
+  --text-muted: #66778f;
+  --accent: #2e63ff;
+  --accent-strong: #1e46b8;
+  --accent-soft: rgba(46, 99, 255, 0.12);
+  --accent-border: rgba(46, 99, 255, 0.28);
+  --accent-contrast: #ffffff;
+  --success-soft: rgba(46, 160, 67, 0.12);
+  --info-soft: rgba(17, 177, 159, 0.12);
+  --progress-track: rgba(16, 35, 61, 0.08);
+  --focus-ring: rgba(46, 99, 255, 0.16);
+  --danger: #be3d2f;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page-bg: #09111d;
+  --page-gradient:
+    radial-gradient(circle at top left, rgba(92, 129, 255, 0.18), transparent 26%),
+    radial-gradient(circle at bottom right, rgba(18, 202, 174, 0.12), transparent 24%),
+    linear-gradient(180deg, #0c1424 0%, #09111d 100%);
+  --surface: rgba(12, 21, 36, 0.78);
+  --surface-subtle: rgba(16, 28, 46, 0.92);
+  --surface-raised: rgba(21, 35, 56, 0.98);
+  --input-bg: rgba(10, 20, 34, 0.96);
+  --border: rgba(202, 222, 255, 0.1);
+  --border-strong: rgba(202, 222, 255, 0.18);
+  --text-primary: #edf4ff;
+  --text-muted: #95a9c8;
+  --accent: #78a3ff;
+  --accent-strong: #a5c1ff;
+  --accent-soft: rgba(120, 163, 255, 0.18);
+  --accent-border: rgba(120, 163, 255, 0.28);
+  --accent-contrast: #0a1730;
+  --success-soft: rgba(83, 214, 140, 0.14);
+  --info-soft: rgba(72, 205, 190, 0.14);
+  --progress-track: rgba(255, 255, 255, 0.08);
+  --focus-ring: rgba(120, 163, 255, 0.18);
+  --danger: #ff8e84;
 }
 
 * {
@@ -30,6 +78,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  background: var(--page-gradient);
 }
 
 #root {
@@ -38,15 +87,19 @@ body {
 
 button,
 input,
-textarea {
+textarea,
+select {
   font: inherit;
 }
 
 h1,
 h2,
 h3 {
+  margin: 0;
   font-family: "Source Serif 4", Georgia, serif;
-  color: var(--text-main);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
 }
 
 p,

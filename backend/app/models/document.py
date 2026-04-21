@@ -18,6 +18,10 @@ class Document(Base):
     stored_path: Mapped[str] = mapped_column(String(512))
     processing_status: Mapped[str] = mapped_column(String(32), default="processed")
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
+    file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    extracted_word_count: Mapped[int] = mapped_column(Integer, default=0)
+    topic_summary: Mapped[str] = mapped_column(String(255), default="")
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     user = relationship("User", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
@@ -32,5 +36,8 @@ class DocumentChunk(Base):
     chunk_text: Mapped[str] = mapped_column(Text)
     topic_label: Mapped[str] = mapped_column(String(120), default="General")
     chunk_word_count: Mapped[int] = mapped_column(Integer, default=0)
+    embedding_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_model: Mapped[str] = mapped_column(String(120), default="local-hash-v1")
+    embedding_norm: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     document = relationship("Document", back_populates="chunks")

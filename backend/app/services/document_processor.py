@@ -1,6 +1,7 @@
 import re
 from collections import Counter
 from pathlib import Path
+from typing import NamedTuple
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
@@ -45,6 +46,13 @@ STOPWORDS = {
 }
 
 
+class ProcessedDocument(NamedTuple):
+    cleaned_text: str
+    chunks: list[str]
+    topics: list[str]
+    word_count: int
+
+
 def extract_text(path: Path) -> str:
     suffix = path.suffix.lower()
     if suffix == ".pdf":
@@ -60,11 +68,13 @@ def extract_text(path: Path) -> str:
 
 def clean_text(raw_text: str) -> str:
     text = raw_text.replace("\x00", " ")
+    text = re.sub(r"[\r\f\v]+", "\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
     text = re.sub(r"\s+", " ", text)
     return text.strip()
 
 
-def chunk_text(text: str, words_per_chunk: int = 280, overlap: int = 40) -> list[str]:
+def chunk_text(text: str, words_per_chunk: int = 420, overlap: int = 70) -> list[str]:
     words = text.split()
     if not words:
         return []
@@ -98,3 +108,17 @@ def choose_chunk_topic(chunk: str, global_topics: list[str]) -> str:
         if topic.lower() in lowered:
             return topic
     return global_topics[0] if global_topics else "General"
+
+
+def process_document(path: Path) -> ProcessedDocument:
+    raw_text = extract_text(path)
+    cleaned = clean_text(raw_text)
+    word_count = len(cleaned.split())
+    topics = extract_topics(cleaned)
+    chunks = chunk_text(cleaned)
+    return ProcessedDocument(
+        cleaned_text=cleaned,
+        chunks=chunks,
+        topics=topics,
+        word_count=word_count,
+    )

@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     session_cookie_name: str = "prepmind_session"
     session_max_age: int = 60 * 60 * 24 * 7
     session_https_only: bool = False
+    max_upload_size_mb: int = 15
+    openai_base_url: str = "https://api.openai.com/v1"
+    openai_chat_model: str = "gpt-5"
+    openai_embedding_model: str = "text-embedding-3-small"
     openai_api_key: str | None = None
 
     model_config = SettingsConfigDict(

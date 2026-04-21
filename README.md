@@ -1,36 +1,72 @@
 # PrepMind AI
 
-Initial project scaffold for the April 2026 technical specification. This first milestone establishes a local-first FastAPI + React workspace with:
+PrepMind AI is a local-first study companion built from the April 2026 technical specification. The current MVP covers the full study loop:
 
-- document upload and ingestion
-- chunking plus lightweight topic extraction
-- dashboard, progress, and recommendation APIs
-- a grounded "Ask AI" flow that works without external model keys
-- frontend pages matching the documented product areas
+- account registration, login, logout, and persistent cookie sessions
+- private document upload and processing for `PDF`, `TXT`, and `DOCX`
+- chunking, topic extraction, and per-user study memory
+- grounded question answering with citations
+- flashcard generation and difficulty rating
+- quiz generation, grading, and weak-topic detection
+- exam mode with timed sessions and readiness scoring
+- dashboard and progress tracking
+- clean React UI with light and dark theme toggle
 
 ## Project Layout
 
-- `backend/`: FastAPI application, SQLite persistence, document processing pipeline
-- `frontend/`: React + TypeScript client for dashboard, upload, study, and progress views
+- `backend/`: FastAPI app, SQLite persistence, document processing, study services
+- `frontend/`: React + TypeScript client for auth, upload, retrieval, review, quiz, exam, and progress
 
-## What Is Implemented
+## Implemented API Surface
+
+Auth:
+
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/session`
+- `GET /api/auth/me`
+
+Documents:
 
 - `POST /api/documents/upload`
 - `GET /api/documents`
+- `DELETE /api/documents/{id}`
+
+Study:
+
+- `POST /api/ask`
 - `GET /api/dashboard`
 - `GET /api/progress`
 - `GET /api/recommendations`
-- `POST /api/ask`
-- `POST /api/auth/register`
-- `POST /api/auth/login`
+- `GET /api/flashcards`
+- `POST /api/flashcards/generate`
+- `POST /api/flashcards/{id}/rate`
+- `POST /api/quiz/generate`
+- `POST /api/quiz/submit`
+- `POST /api/exam/start`
+- `POST /api/exam/submit`
 
-The current backend uses heuristic retrieval and grounded response composition so the app is usable before model credentials are available.
+## Current Retrieval / Generation Strategy
 
-## What I Still Need From You
+The app works end to end without an external model key. The present MVP uses:
 
-- An OpenAI or Gemini API key when you're ready for real generation and embeddings
-- Your preferred deployment target later on: local only, Render, Railway, Vercel, AWS, etc.
-- Whether you want authentication to stay simple or move to JWT/session auth in the next pass
+- persisted chunk embeddings with vector-style similarity ranking
+- lexical retrieval with weighted token overlap
+- grounded synthesis from indexed chunks
+- heuristic flashcard and assessment generation
+- mastery updates from question answering, flashcards, quizzes, and exams
+
+If an OpenAI API key is configured, the backend can also use OpenAI embeddings and model-backed grounded answers. Without a key, it falls back to local embeddings plus heuristic synthesis.
+
+## Document Pipeline Features
+
+- per-user upload directories
+- upload size and file-type validation
+- duplicate protection with optional replace
+- document delete support
+- processing states: `processing`, `processed`, `failed`
+- indexed metadata: file size, extracted word count, and topic summary
 
 ## Run The Backend
 
@@ -50,4 +86,25 @@ npm install
 npm run dev
 ```
 
-The Vite dev server is configured to proxy `/api` requests to `http://127.0.0.1:8000`.
+Open `http://localhost:5173`.
+
+The Vite dev server proxies `/api` requests to `http://127.0.0.1:8000`.
+
+## Verified During Development
+
+- `npm run lint`
+- `npm run build`
+- backend smoke tests covering:
+  - auth session flow
+  - upload, duplicate replace, delete
+  - ask flow
+  - flashcard generation and rating
+  - quiz generation and submit
+  - exam start and submit
+  - progress and dashboard refresh
+
+## Strongest Remaining Upgrades
+
+- move from local persisted vectors to a dedicated vector store such as ChromaDB or FAISS
+- extend model-backed generation beyond answers into flashcards, quizzes, and exam feedback
+- add OCR, PowerPoint parsing, and background ingestion jobs for larger documents
