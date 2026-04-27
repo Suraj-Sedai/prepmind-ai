@@ -13,7 +13,7 @@ from app.core.config import get_settings
 from app.models.document import Document, DocumentChunk
 from app.models.study import Flashcard, QuizAttempt, TopicMastery
 from app.services.embedding_service import cosine_similarity, deserialize_vector, embed_texts
-from app.services.llm_service import generate_grounded_answer
+from app.services.llm_service import generate_general_answer, generate_grounded_answer
 from app.schemas.study import (
     AskResponse,
     CitationItem,
@@ -172,13 +172,15 @@ def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, st
 def answer_question(db: Session, user_id: int, question: str) -> AskResponse:
     chunks = retrieve_relevant_chunks(db, user_id=user_id, question=question)
     if not chunks:
+        general_answer = generate_general_answer(question)
         return AskResponse(
             answer=(
-                "I do not have any uploaded study material yet. Add a PDF, TXT, or DOCX file and I can ground "
-                "answers in that content."
+                general_answer
+                or "I can answer general questions, but general mode is limited without an AI API key. "
+                "You can still upload notes, PDF, TXT, or DOCX files and I will answer from that material."
             ),
             citations=[],
-            confidence=0.0,
+            confidence=0.2 if general_answer else 0.0,
         )
 
     question_tokens = Counter(_tokens(question))

@@ -36,7 +36,14 @@ async function request<T>(input: RequestInfo | URL, init?: RequestInit): Promise
     let message = "Request failed";
     try {
       const data = await response.json();
-      message = typeof data.detail === "string" ? data.detail : message;
+      if (typeof data.detail === "string") {
+        message = data.detail;
+      } else if (Array.isArray(data.detail) && data.detail.length > 0) {
+        const first = data.detail[0];
+        if (typeof first?.msg === "string") {
+          message = first.msg;
+        }
+      }
     } catch {
       const text = await response.text();
       if (text) {
