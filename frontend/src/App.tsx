@@ -5,10 +5,8 @@ import logoMark from "./assets/prepmind-mark.svg";
 import {
   askQuestion,
   deleteDocument,
-  fetchDashboard,
   fetchDocuments,
   fetchFlashcards,
-  fetchProgress,
   fetchSession,
   fetchStatus,
   generateFlashcards,
@@ -22,13 +20,18 @@ import {
 } from "./api";
 import type { AskResponse, DocumentItem, FlashcardItem, QuizQuestion, QuizSubmitResponse, User } from "./types";
 
-type ViewKey = "dashboard" | "upload" | "flashcards" | "quiz" | "profile";
+type ViewKey = "upload" | "flashcards" | "quiz";
 type AuthMode = "login" | "register";
 type ThemeMode = "light" | "dark";
 type Difficulty = "easy" | "medium" | "hard";
 type WorkspaceSnapshot = {
   documents: DocumentItem[];
   flashcards: FlashcardItem[];
+};
+type ChatExchange = {
+  question: string;
+  answer: string;
+  citations: AskResponse["citations"];
 };
 type IconName =
   | "dashboard"
@@ -50,11 +53,9 @@ type IconName =
   | "trend";
 
 const views: Array<{ key: ViewKey; label: string; icon: IconName }> = [
-  { key: "dashboard", label: "Dashboard", icon: "dashboard" },
   { key: "upload", label: "Library", icon: "upload" },
   { key: "flashcards", label: "Study", icon: "cards" },
   { key: "quiz", label: "Quiz", icon: "quiz" },
-  { key: "profile", label: "Profile", icon: "user" },
 ];
 
 function AppIcon({ name, style }: { name: IconName; style?: React.CSSProperties }) {
@@ -199,12 +200,9 @@ function App() {
   const [sessionChecked, setSessionChecked] = useState(false);
   const [status, setStatus] = useState<"online" | "offline">("offline");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeView, setActiveView] = useState<ViewKey>("dashboard");
+  const [activeView, setActiveView] = useState<ViewKey>("upload");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [busyKey, setBusyKey] = useState<string | null>(null);
-
-  const [dashboardData, setDashboardData] = useState<any>(null);
-  const [progressData, setProgressData] = useState<any>(null);
 
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
@@ -219,8 +217,8 @@ function App() {
   const [uploadMessage, setUploadMessage] = useState("Upload notes, PDF, TXT, or DOCX files.");
 
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<AskResponse | null>(null);
-  const [askMessage, setAskMessage] = useState("Ask about your notes or ask a general question.");
+  const [chatHistory, setChatHistory] = useState<ChatExchange[]>([]);
+  const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
   const [chatExpanded, setChatExpanded] = useState(false);
 
   const [flashcards, setFlashcards] = useState<FlashcardItem[]>([]);
@@ -256,14 +254,7 @@ function App() {
   }
 
   async function loadWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
-    const [documentPayload, flashcardPayload, dashboardPayload, progressPayload] = await Promise.all([
-      fetchDocuments(), 
-      fetchFlashcards(),
-      fetchDashboard(),
-      fetchProgress()
-    ]);
-    setDashboardData(dashboardPayload);
-    setProgressData(progressPayload);
+    const [documentPayload, flashcardPayload] = await Promise.all([fetchDocuments(), fetchFlashcards()]);
     return {
       documents: documentPayload.items,
       flashcards: flashcardPayload.items,
@@ -274,12 +265,11 @@ function App() {
     startTransition(() => {
       setDocuments([]);
       setFlashcards([]);
-      setAnswer(null);
+      setChatHistory([]);
+      setPendingQuestion(null);
       setQuizQuestions([]);
       setQuizAnswers({});
       setQuizResult(null);
-      setDashboardData(null);
-      setProgressData(null);
     });
   }
 
@@ -400,7 +390,7 @@ function App() {
       setAuthPassword("");
       setWorkspaceMessage("Signed out.");
       setAuthMessage("Sign in again to continue.");
-      setActiveView("dashboard");
+      setActiveView("upload");
     } catch (error) {
       console.error(error);
       setAuthMessage(error instanceof Error ? error.message : "Logout failed.");
@@ -447,17 +437,36 @@ function App() {
 
   async function handleAsk(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!question.trim()) return;
+    const submittedQuestion = question.trim();
+    if (!submittedQuestion) return;
     setChatExpanded(true);
+    setPendingQuestion(submittedQuestion);
     setBusyKey("ask");
-    setAskMessage("Thinking...");
     try {
-      const payload = await askQuestion(question);
-      setAnswer(payload);
-      setAskMessage(payload.citations.length ? `Answered with ${payload.citations.length} note citation(s).` : "Answered in general mode.");
+      const payload = await askQuestion(submittedQuestion);
+      setChatHistory((current) => [
+        ...current,
+        {
+          question: submittedQuestion,
+          answer: payload.answer,
+          citations: payload.citations,
+        },
+      ]);
+      setQuestion("");
+      setPendingQuestion(null);
     } catch (error) {
       console.error(error);
-      setAskMessage(error instanceof Error ? error.message : "Chat failed.");
+      const message = error instanceof Error ? error.message : "Chat failed.";
+      setChatHistory((current) => [
+        ...current,
+        {
+          question: submittedQuestion,
+          answer: message,
+          citations: [],
+        },
+      ]);
+      setQuestion("");
+      setPendingQuestion(null);
     } finally {
       setBusyKey(null);
     }
@@ -552,148 +561,6 @@ function App() {
 
   const currentFlashcard = flashcards[activeFlashcardIndex] ?? null;
 
-  function renderDashboard() {
-    const getStatIcon = (label: string): IconName => {
-      if (label.includes("Documents")) return "file";
-      if (label.includes("Readiness")) return "trend";
-      if (label.includes("Accuracy")) return "spark";
-      if (label.includes("Flashcards")) return "cards";
-      if (label.includes("Topics")) return "dashboard";
-      return "spark";
-    };
-
-    return (
-      <div className="dashboard-view">
-        <section className="dashboard-hero">
-          <div className="welcome-card">
-            <p className="eyebrow">Overview</p>
-            <h2>Welcome back, {currentUser?.name.split(' ')[0]}</h2>
-            <p>Your study readiness is looking solid. Here's what needs focus today.</p>
-          </div>
-          <div className="stats-grid">
-            {dashboardData?.stats.map((stat: any, index: number) => (
-              <article key={index} className={`stat-card ${stat.tone}`}>
-                <div className="stat-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-                   <p>{stat.label}</p>
-                   <AppIcon name={getStatIcon(stat.label)} style={{ width: '16px', height: '16px', opacity: 0.6 }} />
-                </div>
-                <strong>{stat.value}</strong>
-              </article>
-            ))}
-          </div>
-        </section>
-
-        <div className="view-grid">
-          <article className="panel">
-            <div className="panel-head">
-              <div>
-                <p className="eyebrow">Performance</p>
-                <h2>Topic Mastery</h2>
-              </div>
-            </div>
-            <div className="mastery-list">
-              {progressData?.topic_mastery.length ? (
-                progressData.topic_mastery.map((topic: any, idx: number) => (
-                  <div key={idx} className="mastery-item">
-                    <div className="mastery-info">
-                      <strong>{topic.topic_name}</strong>
-                      <span style={{ fontWeight: 700, color: 'var(--accent)' }}>{topic.mastery_score}%</span>
-                    </div>
-                    <div className="progress-bar-track">
-                      <div className="progress-bar-fill" style={{ width: `${topic.mastery_score}%` }} />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <article className="empty-card" style={{ minHeight: '120px' }}>
-                   <p>No mastery data yet. Start studying to see progress.</p>
-                </article>
-              )}
-            </div>
-          </article>
-
-          <article className="panel">
-            <div className="panel-head">
-              <div>
-                <p className="eyebrow">Plan</p>
-                <h2>Recommendations</h2>
-              </div>
-            </div>
-            <div className="stack-list">
-              {dashboardData?.recommendations.length ? (
-                dashboardData.recommendations.map((rec: any, idx: number) => (
-                  <article key={idx} className="rec-card">
-                    <div className="rec-icon">
-                      <AppIcon name="spark" />
-                    </div>
-                    <div className="rec-content">
-                      <strong>{rec.topic}</strong>
-                      <p>{rec.reason}</p>
-                      <small>{rec.action}</small>
-                    </div>
-                  </article>
-                ))
-              ) : (
-                <article className="empty-card" style={{ minHeight: '120px' }}>
-                   <p>Upload more materials to get AI recommendations.</p>
-                </article>
-              )}
-            </div>
-          </article>
-        </div>
-      </div>
-    );
-  }
-
-  function renderProfile() {
-    return (
-      <section className="view-grid single-col">
-        <article className="panel profile-panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Settings</p>
-              <h2>User Profile</h2>
-            </div>
-          </div>
-          <div className="profile-header">
-             <div className="avatar-placeholder">
-                {currentUser?.name.charAt(0)}
-             </div>
-             <div className="profile-info">
-                <h3>{currentUser?.name}</h3>
-                <p>{currentUser?.email}</p>
-             </div>
-          </div>
-          <div className="form-grid">
-             <label>
-                Study Difficulty Level
-                <select 
-                  value={currentUser?.preferred_difficulty} 
-                  onChange={async (e) => {
-                    const newDiff = e.target.value;
-                    try {
-                      await refreshWorkspace("Updating settings...");
-                    } catch (err) {}
-                  }}
-                >
-                   <option value="easy">Beginner (Easy)</option>
-                   <option value="medium">Standard (Medium)</option>
-                   <option value="hard">Advanced (Hard)</option>
-                </select>
-             </label>
-             <div className="danger-zone">
-                <button className="ghost-button danger" onClick={handleLogout}>
-                   <AppIcon name="logout" />
-                   Sign Out of Session
-                </button>
-             </div>
-          </div>
-        </article>
-      </section>
-    );
-  }
-
-
   function renderUpload() {
     return (
       <section className="view-grid">
@@ -753,7 +620,7 @@ function App() {
                         <span className="tag type">{document.document_type.toUpperCase()}</span>
                       </div>
                       <small className="file-date">
-                        Added {formatDate(document.upload_date)} • {document.processing_status}
+                        Added {formatDate(document.upload_date)} | {document.processing_status}
                       </small>
                     </div>
                   </div>
@@ -804,30 +671,48 @@ function App() {
               )}
               
               <div className="chat-history">
-                {answer ? (
+                {chatHistory.length || pendingQuestion ? (
                   <div className="answer-stack">
-                    <article className="message-card user-message">
-                      <p>{question}</p>
-                    </article>
-                    <article className="message-card assistant-message">
-                      <div className="assistant-header">
-                        <AppIcon name="spark" style={{ width: '16px', height: '16px' }} />
-                        <span>PrepMind AI</span>
+                    {chatHistory.map((entry, index) => (
+                      <div className="answer-stack" key={`${entry.question}-${index}`}>
+                        <article className="message-card user-message">
+                          <p>{entry.question}</p>
+                        </article>
+                        <article className="message-card assistant-message">
+                          <div className="assistant-header">
+                            <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
+                            <span>PrepMind AI</span>
+                          </div>
+                          <p>{entry.answer}</p>
+                        </article>
+                        {entry.citations.length ? (
+                          <div className="citation-grid">
+                            {entry.citations.map((citation, citationIndex) => (
+                              <article className="citation-card" key={`${citation.document_name}-${citationIndex}`}>
+                                <div className="cit-header">
+                                  <AppIcon name="file" style={{ width: "12px", height: "12px" }} />
+                                  <strong>{citation.document_name}</strong>
+                                </div>
+                                <p>{citation.snippet}</p>
+                              </article>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
-                      <p>{answer.answer}</p>
-                    </article>
-                    {answer.citations.length ? (
-                      <div className="citation-grid">
-                        {answer.citations.map((citation, index) => (
-                          <article className="citation-card" key={index}>
-                            <div className="cit-header">
-                              <AppIcon name="file" style={{ width: '12px', height: '12px' }} />
-                              <strong>{citation.document_name}</strong>
-                            </div>
-                            <p>{citation.snippet}</p>
-                          </article>
-                        ))}
-                      </div>
+                    ))}
+                    {pendingQuestion ? (
+                      <>
+                        <article className="message-card user-message">
+                          <p>{pendingQuestion}</p>
+                        </article>
+                        <article className="message-card assistant-message loading-message">
+                          <div className="assistant-header">
+                            <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
+                            <span>PrepMind AI</span>
+                          </div>
+                          <p>Thinking...</p>
+                        </article>
+                      </>
                     ) : null}
                   </div>
                 ) : chatExpanded ? (
@@ -853,7 +738,7 @@ function App() {
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && !e.shiftKey) {
                       e.preventDefault();
-                      handleAsk(e as any);
+                      e.currentTarget.form?.requestSubmit();
                     }
                   }}
                 />
@@ -1125,7 +1010,7 @@ function App() {
             <h1>Simple study workspace.</h1>
             <p>Upload notes, chat, generate flashcards, and create quizzes.</p>
             <ul className="simple-list">
-              <li>Upload `notes`, `pdf`, `txt`, and `docx` files</li>
+              <li>Upload notes, PDF, TXT, and DOCX files</li>
               <li>Ask about your notes or ask general questions</li>
               <li>Create flashcards and quizzes</li>
             </ul>
@@ -1183,7 +1068,7 @@ function App() {
           <img alt="PrepMind AI logo" className="logo-mark" src={logoMark} />
           <div>
             <h1>PrepMind AI</h1>
-            <p className="status-text">{status === "online" ? "● Connected" : "○ Offline"}</p>
+            <p className="status-text">{status === "online" ? "Connected" : "Offline"}</p>
           </div>
         </div>
         <div className="topbar-actions">
@@ -1212,11 +1097,9 @@ function App() {
       </nav>
 
       <main className="view-container">
-        {activeView === "dashboard" ? renderDashboard() : null}
         {activeView === "upload" ? renderUpload() : null}
         {activeView === "flashcards" ? renderFlashcards() : null}
         {activeView === "quiz" ? renderQuiz() : null}
-        {activeView === "profile" ? renderProfile() : null}
       </main>
 
       {renderChatDock()}
@@ -1225,3 +1108,4 @@ function App() {
 }
 
 export default App;
+

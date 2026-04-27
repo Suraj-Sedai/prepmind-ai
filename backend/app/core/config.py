@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     def upload_path(self) -> Path:
         return Path(self.upload_dir).resolve()
 
+    @property
+    def frontend_dist_path(self) -> Path:
+        return Path(__file__).resolve().parents[3] / "frontend" / "dist"
+
 
 @lru_cache
 def get_settings() -> Settings:

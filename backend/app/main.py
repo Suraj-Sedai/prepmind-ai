@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -51,3 +53,30 @@ app.include_router(auth_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
 app.mount("/media", StaticFiles(directory=settings.upload_path), name="media")
+
+frontend_dist = settings.frontend_dist_path
+frontend_assets = frontend_dist / "assets"
+
+if frontend_assets.exists():
+    app.mount("/assets", StaticFiles(directory=frontend_assets), name="frontend-assets")
+
+
+def _frontend_file(path_value: str) -> Path | None:
+    candidate = frontend_dist / path_value
+    if candidate.exists() and candidate.is_file():
+        return candidate
+    return None
+
+
+if frontend_dist.exists():
+    @app.get("/", include_in_schema=False)
+    async def frontend_index() -> FileResponse:
+        return FileResponse(frontend_dist / "index.html")
+
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def frontend_routes(full_path: str) -> FileResponse:
+        static_file = _frontend_file(full_path)
+        if static_file is not None:
+            return FileResponse(static_file)
+        return FileResponse(frontend_dist / "index.html")

@@ -1,23 +1,20 @@
 # PrepMind AI
 
-PrepMind AI is a local-first study companion built from the April 2026 technical specification. The current MVP covers the full study loop:
+PrepMind AI is a local-first study app with a deliberately simple core flow:
 
-- account registration, login, logout, and persistent cookie sessions
-- private document upload and processing for `PDF`, `TXT`, and `DOCX`
-- chunking, topic extraction, and per-user study memory
-- grounded question answering with citations
-- flashcard generation and difficulty rating
-- quiz generation, grading, and weak-topic detection
-- exam mode with timed sessions and readiness scoring
-- dashboard and progress tracking
-- clean React UI with light and dark theme toggle
+- upload notes in `PDF`, `TXT`, and `DOCX`
+- ask questions in the built-in AI chat
+- generate flashcards from uploaded material
+- generate quizzes from uploaded material
+
+The current UI keeps chat available globally at the bottom of the app, so users can ask questions from any section without leaving their current workflow.
 
 ## Project Layout
 
-- `backend/`: FastAPI app, SQLite persistence, document processing, study services
-- `frontend/`: React + TypeScript client for auth, upload, retrieval, review, quiz, exam, and progress
+- `backend/`: FastAPI app, SQLite persistence, document processing, retrieval, and study services
+- `frontend/`: React + TypeScript client for auth, uploads, flashcards, quizzes, and the global chat dock
 
-## Implemented API Surface
+## Active API Surface
 
 Auth:
 
@@ -36,37 +33,33 @@ Documents:
 Study:
 
 - `POST /api/ask`
-- `GET /api/dashboard`
-- `GET /api/progress`
-- `GET /api/recommendations`
 - `GET /api/flashcards`
 - `POST /api/flashcards/generate`
 - `POST /api/flashcards/{id}/rate`
 - `POST /api/quiz/generate`
 - `POST /api/quiz/submit`
-- `POST /api/exam/start`
-- `POST /api/exam/submit`
 
-## Current Retrieval / Generation Strategy
+## Retrieval and Answering
 
-The app works end to end without an external model key. The present MVP uses:
+The app works without an external model key.
 
-- persisted chunk embeddings with vector-style similarity ranking
-- lexical retrieval with weighted token overlap
-- grounded synthesis from indexed chunks
-- heuristic flashcard and assessment generation
-- mastery updates from question answering, flashcards, quizzes, and exams
+Current behavior:
 
-If an OpenAI API key is configured, the backend can also use OpenAI embeddings and model-backed grounded answers. Without a key, it falls back to local embeddings plus heuristic synthesis.
+- document text is extracted, cleaned, chunked, and topic-labeled
+- chunk embeddings are stored with each uploaded document
+- retrieval uses vector similarity plus token overlap
+- answers are grounded in uploaded notes when relevant citations are found
+- if no relevant notes are found, chat falls back to general-answer mode
 
-## Document Pipeline Features
+If an OpenAI API key is configured, the backend can use OpenAI embeddings and model-backed answers. Without that key, it falls back to local embeddings and local synthesis.
+
+## Document Pipeline
 
 - per-user upload directories
-- upload size and file-type validation
+- file type and size validation
 - duplicate protection with optional replace
-- document delete support
+- delete support
 - processing states: `processing`, `processed`, `failed`
-- indexed metadata: file size, extracted word count, and topic summary
 
 ## Run The Backend
 
@@ -90,21 +83,24 @@ Open `http://localhost:5173`.
 
 The Vite dev server proxies `/api` requests to `http://127.0.0.1:8000`.
 
-## Verified During Development
+## Current Priorities
 
-- `npm run lint`
-- `npm run build`
-- backend smoke tests covering:
-  - auth session flow
-  - upload, duplicate replace, delete
-  - ask flow
-  - flashcard generation and rating
-  - quiz generation and submit
-  - exam start and submit
-  - progress and dashboard refresh
+The best next improvements are:
 
-## Strongest Remaining Upgrades
+- split the large frontend app shell into smaller components
+- add persistent multi-turn chat history instead of only the latest exchange
+- optionally remove backend endpoints that are no longer part of the simplified visible product
 
-- move from local persisted vectors to a dedicated vector store such as ChromaDB or FAISS
-- extend model-backed generation beyond answers into flashcards, quizzes, and exam feedback
-- add OCR, PowerPoint parsing, and background ingestion jobs for larger documents
+## Google Cloud Deployment
+
+This repo now includes Google Cloud deployment files for Cloud Run:
+
+- [Dockerfile](C:\Users\suraj\OneDrive\Documents\Playground\prepmind-ai\Dockerfile)
+- [cloudbuild.yaml](C:\Users\suraj\OneDrive\Documents\Playground\prepmind-ai\cloudbuild.yaml)
+- [DEPLOY_GOOGLE_CLOUD.md](C:\Users\suraj\OneDrive\Documents\Playground\prepmind-ai\DEPLOY_GOOGLE_CLOUD.md)
+
+The recommended production path is:
+
+- Cloud Run for the app
+- Cloud SQL for PostgreSQL for the database
+- Cloud Storage bucket mounts for uploads
