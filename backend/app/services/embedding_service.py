@@ -2,6 +2,7 @@ import hashlib
 import json
 import math
 from collections import Counter
+from typing import Literal
 
 import httpx
 
@@ -9,6 +10,7 @@ from app.core.config import get_settings
 
 settings = get_settings()
 LOCAL_DIMENSIONS = 256
+EmbeddingTaskType = Literal["RETRIEVAL_DOCUMENT", "RETRIEVAL_QUERY"]
 
 
 def _tokenize(text: str) -> list[str]:
@@ -33,31 +35,107 @@ def _local_embedding(text: str) -> list[float]:
     return _normalize(vector)
 
 
-def embed_texts(texts: list[str]) -> tuple[list[list[float]], str]:
-    if not texts:
-        return [], "local-hash-v1"
+def _embed_with_gemini(
+    texts: list[str],
+    task_type: EmbeddingTaskType,
+) -> tuple[list[list[float]], str] | None:
+    if not settings.gemini_api_key:
+        return None
 
-    if settings.openai_api_key:
-        try:
+    try:
+        if len(texts) == 1:
             response = httpx.post(
-                f"{settings.openai_base_url}/embeddings",
+                f"{settings.gemini_base_url}/models/{settings.gemini_embedding_model}:embedContent",
                 headers={
-                    "Authorization": f"Bearer {settings.openai_api_key}",
+                    "x-goog-api-key": settings.gemini_api_key,
                     "Content-Type": "application/json",
                 },
                 json={
-                    "model": settings.openai_embedding_model,
-                    "input": texts,
-                    "encoding_format": "float",
+                    "model": f"models/{settings.gemini_embedding_model}",
+                    "content": {"parts": [{"text": texts[0]}]},
+                    "taskType": task_type,
                 },
                 timeout=60.0,
             )
             response.raise_for_status()
             payload = response.json()
-            vectors = [item["embedding"] for item in payload["data"]]
-            return vectors, settings.openai_embedding_model
-        except Exception:
-            pass
+            embedding = payload.get("embedding", {}).get("values", [])
+            if embedding:
+                return [[float(value) for value in embedding]], settings.gemini_embedding_model
+            return None
+
+        response = httpx.post(
+            f"{settings.gemini_base_url}/models/{settings.gemini_embedding_model}:batchEmbedContents",
+            headers={
+                "x-goog-api-key": settings.gemini_api_key,
+                "Content-Type": "application/json",
+            },
+            json={
+                "requests": [
+                    {
+                        "model": f"models/{settings.gemini_embedding_model}",
+                        "content": {"parts": [{"text": text}]},
+                        "taskType": task_type,
+                    }
+                    for text in texts
+                ]
+            },
+            timeout=60.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        embeddings = []
+        for item in payload.get("embeddings", []):
+            values = item.get("values", [])
+            embeddings.append([float(value) for value in values])
+        if embeddings:
+            return embeddings, settings.gemini_embedding_model
+    except Exception:
+        return None
+
+    return None
+
+
+def _embed_with_openai(texts: list[str]) -> tuple[list[list[float]], str] | None:
+    if not settings.openai_api_key:
+        return None
+
+    try:
+        response = httpx.post(
+            f"{settings.openai_base_url}/embeddings",
+            headers={
+                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Content-Type": "application/json",
+            },
+            json={
+                "model": settings.openai_embedding_model,
+                "input": texts,
+                "encoding_format": "float",
+            },
+            timeout=60.0,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        vectors = [item["embedding"] for item in payload["data"]]
+        return vectors, settings.openai_embedding_model
+    except Exception:
+        return None
+
+
+def embed_texts(
+    texts: list[str],
+    task_type: EmbeddingTaskType = "RETRIEVAL_DOCUMENT",
+) -> tuple[list[list[float]], str]:
+    if not texts:
+        return [], "local-hash-v1"
+
+    gemini_result = _embed_with_gemini(texts, task_type)
+    if gemini_result is not None:
+        return gemini_result
+
+    openai_result = _embed_with_openai(texts)
+    if openai_result is not None:
+        return openai_result
 
     return [_local_embedding(text) for text in texts], "local-hash-v1"
 

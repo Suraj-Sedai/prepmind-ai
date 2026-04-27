@@ -124,13 +124,14 @@ def retrieve_relevant_chunks(
         return []
 
     question_tokens = Counter(_tokens(question))
-    question_vector, _ = embed_texts([question])
+    question_vector, _ = embed_texts([question], task_type="RETRIEVAL_QUERY")
     query_embedding = question_vector[0] if question_vector else []
     idf = _idf_scores(chunks)
-    scored: list[tuple[float, DocumentChunk]] = []
+    scored: list[tuple[float, int, float, DocumentChunk]] = []
     for chunk in chunks:
         chunk_tokens = Counter(_tokens(chunk.chunk_text))
         overlap = set(question_tokens).intersection(chunk_tokens)
+        overlap_count = len(overlap)
         lexical = sum(min(question_tokens[token], chunk_tokens[token]) * idf.get(token, 1.0) for token in overlap)
         vector_score = cosine_similarity(query_embedding, deserialize_vector(chunk.embedding_vector))
         topic_bonus = 0.0
@@ -140,10 +141,19 @@ def retrieve_relevant_chunks(
             if topic.lower() in chunk.chunk_text.lower():
                 topic_bonus += 0.25
         score = vector_score * 0.7 + (lexical / math.sqrt(max(chunk.chunk_word_count, 1))) * 0.3 + topic_bonus
-        scored.append((score, chunk))
+        scored.append((score, overlap_count, vector_score, chunk))
 
-    scored.sort(key=lambda item: (item[0], item[1].chunk_word_count), reverse=True)
-    return [chunk for score, chunk in scored if score > 0][:limit] or [chunk for _, chunk in scored[:limit]]
+    scored.sort(key=lambda item: (item[0], item[3].chunk_word_count), reverse=True)
+
+    relevant_chunks = [
+        chunk
+        for score, overlap_count, vector_score, chunk in scored
+        if score >= 0.18 or overlap_count >= 2 or (overlap_count >= 1 and vector_score >= 0.45)
+    ]
+    if relevant_chunks:
+        return relevant_chunks[:limit]
+
+    return []
 
 
 def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, study_bump: int = 1) -> None:

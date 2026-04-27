@@ -58,6 +58,12 @@ const views: Array<{ key: ViewKey; label: string; icon: IconName }> = [
   { key: "quiz", label: "Quiz", icon: "quiz" },
 ];
 
+const chatSuggestions = [
+  "Summarize my uploaded notes.",
+  "Explain this topic in simple words.",
+  "Ask me a practice question.",
+];
+
 function AppIcon({ name, style }: { name: IconName; style?: React.CSSProperties }) {
   const stroke = {
     fill: "none",
@@ -661,12 +667,19 @@ function App() {
               {chatExpanded && (
                 <div className="chat-stage-top">
                   <div>
-                    <p className="eyebrow chat-eyebrow">Command Center</p>
-                    <h2>Study Assistant</h2>
+                    <p className="eyebrow chat-eyebrow">Prepmind.ai</p>
+                    <h2>Ask anything</h2>
                   </div>
-                  <button className="ghost-button mini-close" onClick={() => setChatExpanded(false)} type="button">
-                    <AppIcon name="chevron" style={{ transform: 'rotate(180deg)' }} />
-                  </button>
+                  <div className="chat-stage-actions">
+                    {chatHistory.length ? (
+                      <button className="ghost-button mini-close" onClick={() => setChatHistory([])} type="button">
+                        Clear
+                      </button>
+                    ) : null}
+                    <button className="ghost-button mini-close" onClick={() => setChatExpanded(false)} type="button">
+                      <AppIcon name="chevron" style={{ transform: "rotate(180deg)" }} />
+                    </button>
+                  </div>
                 </div>
               )}
               
@@ -681,7 +694,7 @@ function App() {
                         <article className="message-card assistant-message">
                           <div className="assistant-header">
                             <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
-                            <span>PrepMind AI</span>
+                            <span>Prepmind.ai</span>
                           </div>
                           <p>{entry.answer}</p>
                         </article>
@@ -708,7 +721,7 @@ function App() {
                         <article className="message-card assistant-message loading-message">
                           <div className="assistant-header">
                             <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
-                            <span>PrepMind AI</span>
+                            <span>Prepmind.ai</span>
                           </div>
                           <p>Thinking...</p>
                         </article>
@@ -720,8 +733,23 @@ function App() {
                     <div className="ai-pulse">
                       <AppIcon name="spark" />
                     </div>
-                    <h3>How can I help your studies?</h3>
-                    <p>Ask about specific topics in your notes or request a summary.</p>
+                    <h3>How can I help?</h3>
+                    <p>Ask about your notes, get explanations, or ask a general question.</p>
+                    <div className="chat-suggestion-row">
+                      {chatSuggestions.map((suggestion) => (
+                        <button
+                          className="chat-suggestion-chip"
+                          key={suggestion}
+                          onClick={() => {
+                            setQuestion(suggestion);
+                            setChatExpanded(true);
+                          }}
+                          type="button"
+                        >
+                          {suggestion}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 ) : null}
               </div>
@@ -732,7 +760,7 @@ function App() {
                 <textarea
                   onChange={(event) => setQuestion(event.target.value)}
                   onFocus={() => setChatExpanded(true)}
-                  placeholder="Message PrepMind AI..."
+                  placeholder="Message Prepmind.ai..."
                   rows={1}
                   value={question}
                   onKeyDown={(e) => {
@@ -743,13 +771,13 @@ function App() {
                   }}
                 />
                 <div className="composer-actions">
-                   <div className="composer-meta">
-                      <AppIcon name="spark" style={{ width: '14px', height: '14px' }} />
-                      <span>{documents.length} notes</span>
-                   </div>
-                   <button className="send-circle" disabled={busyKey === "ask" || !question.trim()} type="submit">
-                      <AppIcon name="send" />
-                   </button>
+                  <div className="composer-meta">
+                    <AppIcon name="spark" style={{ width: "14px", height: "14px" }} />
+                    <span>{documents.length ? `${documents.length} notes ready` : "General mode"}</span>
+                  </div>
+                  <button className="send-circle" disabled={busyKey === "ask" || !question.trim()} type="submit">
+                    <AppIcon name="send" />
+                  </button>
                 </div>
               </div>
             </form>
@@ -992,7 +1020,7 @@ function App() {
     return (
       <div className="app-shell auth-shell">
         <article className="auth-card">
-          <img alt="PrepMind AI logo" className="logo-mark" src={logoMark} />
+          <img alt="Prepmind.ai logo" className="logo-mark" src={logoMark} />
           <h1>Loading...</h1>
           <p>{workspaceMessage}</p>
         </article>
@@ -1005,8 +1033,8 @@ function App() {
       <div className="app-shell auth-shell">
         <div className="auth-layout">
           <article className="auth-card intro-card">
-            <img alt="PrepMind AI logo" className="logo-mark" src={logoMark} />
-            <p className="eyebrow">PrepMind AI</p>
+            <img alt="Prepmind.ai logo" className="logo-mark" src={logoMark} />
+            <p className="eyebrow">Prepmind.ai</p>
             <h1>Simple study workspace.</h1>
             <p>Upload notes, chat, generate flashcards, and create quizzes.</p>
             <ul className="simple-list">
@@ -1065,9 +1093,9 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="brand-row">
-          <img alt="PrepMind AI logo" className="logo-mark" src={logoMark} />
+          <img alt="Prepmind.ai logo" className="logo-mark" src={logoMark} />
           <div>
-            <h1>PrepMind AI</h1>
+            <h1>Prepmind.ai</h1>
             <p className="status-text">{status === "online" ? "Connected" : "Offline"}</p>
           </div>
         </div>

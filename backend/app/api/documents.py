@@ -145,7 +145,7 @@ async def upload_document(
         document.extracted_word_count = processed.word_count
         document.topic_summary = ", ".join(processed.topics[:5])
         document.error_message = None
-        chunk_vectors, embedding_model = embed_texts(processed.chunks)
+        chunk_vectors, embedding_model = embed_texts(processed.chunks, task_type="RETRIEVAL_DOCUMENT")
 
         for index, chunk in enumerate(processed.chunks):
             topic = choose_chunk_topic(chunk, processed.topics)
