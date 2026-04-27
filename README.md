@@ -1,4 +1,5 @@
 # PrepMind AI
+https://prepmind-ai-875743593015.europe-west1.run.app/ 
 
 PrepMind AI is a local-first study app with a deliberately simple core flow:
 
