@@ -1168,6 +1168,48 @@ h2 {
   font-size: 0.98rem;
 }
 
+.assistant-content {
+  display: grid;
+  gap: 12px;
+}
+
+.formatted-block {
+  display: grid;
+  gap: 8px;
+}
+
+.formatted-block p,
+.assistant-content > p {
+  margin: 0;
+  line-height: 1.7;
+}
+
+.assistant-content strong {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.formatted-list {
+  margin: 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 8px;
+  color: var(--text-secondary);
+}
+
+.formatted-list li {
+  line-height: 1.7;
+}
+
+.numbered-list li::marker {
+  font-weight: 800;
+  color: var(--accent);
+}
+
+.bullet-list li::marker {
+  color: var(--accent);
+}
+
 .loading-message {
   opacity: 0.88;
 }
@@ -1712,6 +1754,10 @@ h2 {
 
   .message-card {
     max-width: 100%;
+  }
+
+  .formatted-list {
+    padding-left: 1.05rem;
   }
 }
 

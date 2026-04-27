@@ -1,5 +1,5 @@
 import { startTransition, useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import "./App.css";
 import logoMark from "./assets/prepmind-mark.svg";
 import {
@@ -194,6 +194,60 @@ function formatDate(value: string) {
 
 function isValidEmail(value: string) {
   return /\S+@\S+\.\S+/.test(value);
+}
+
+function renderInlineFormatting(text: string): ReactNode[] {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((segment, index) => {
+    if (segment.startsWith("**") && segment.endsWith("**") && segment.length > 4) {
+      return <strong key={`bold-${index}`}>{segment.slice(2, -2)}</strong>;
+    }
+    return segment;
+  });
+}
+
+function renderAnswerContent(text: string) {
+  const paragraphs = text
+    .trim()
+    .split(/\n\s*\n/)
+    .map((block) => block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean))
+    .filter((lines) => lines.length);
+
+  return paragraphs.map((lines, paragraphIndex) => {
+    const numberedLines = lines.every((line) => /^\d+\.\s+/.test(line));
+    const bulletLines = lines.every((line) => /^[-*]\s+/.test(line));
+
+    if (numberedLines) {
+      return (
+        <ol className="formatted-list numbered-list" key={`paragraph-${paragraphIndex}`}>
+          {lines.map((line, lineIndex) => (
+            <li key={`item-${paragraphIndex}-${lineIndex}`}>
+              {renderInlineFormatting(line.replace(/^\d+\.\s+/, ""))}
+            </li>
+          ))}
+        </ol>
+      );
+    }
+
+    if (bulletLines) {
+      return (
+        <ul className="formatted-list bullet-list" key={`paragraph-${paragraphIndex}`}>
+          {lines.map((line, lineIndex) => (
+            <li key={`item-${paragraphIndex}-${lineIndex}`}>
+              {renderInlineFormatting(line.replace(/^[-*]\s+/, ""))}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+
+    return (
+      <div className="formatted-block" key={`paragraph-${paragraphIndex}`}>
+        {lines.map((line, lineIndex) => (
+          <p key={`line-${paragraphIndex}-${lineIndex}`}>{renderInlineFormatting(line)}</p>
+        ))}
+      </div>
+    );
+  });
 }
 
 function App() {
@@ -696,7 +750,7 @@ function App() {
                             <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
                             <span>Prepmind.ai</span>
                           </div>
-                          <p>{entry.answer}</p>
+                          <div className="assistant-content">{renderAnswerContent(entry.answer)}</div>
                         </article>
                         {entry.citations.length ? (
                           <div className="citation-grid">
@@ -723,7 +777,9 @@ function App() {
                             <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
                             <span>Prepmind.ai</span>
                           </div>
-                          <p>Thinking...</p>
+                          <div className="assistant-content">
+                            <p>Thinking...</p>
+                          </div>
                         </article>
                       </>
                     ) : null}
