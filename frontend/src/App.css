@@ -1338,6 +1338,464 @@ h2 {
   .chat-dock.expanded .chat-scroll { padding: 24px 20px; }
 }
 
+/* Responsive polish and missing component styles */
+.auth-card {
+  width: min(480px, 100%);
+  display: grid;
+  gap: 20px;
+}
+
+.panel-head {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+.panel-head > div,
+.file-info,
+.citation-card,
+.question-card,
+.message-card,
+.empty-card {
+  min-width: 0;
+}
+
+.view-container,
+.stack-list,
+.answer-stack {
+  width: 100%;
+}
+
+.stack-list,
+.answer-stack {
+  gap: 16px;
+}
+
+.split-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.upload-zone-icon {
+  margin: 0 auto 8px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+}
+
+.checkbox-row input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--accent);
+  flex-shrink: 0;
+}
+
+.helper-text {
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.pill,
+.chip-button,
+.mini-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.pill {
+  padding: 6px 12px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.78rem;
+  line-height: 1;
+}
+
+.chip-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  padding: 10px 14px;
+  font-size: 0.88rem;
+  cursor: pointer;
+  transition: var(--transition-fast);
+}
+
+.chip-button:hover {
+  border-color: var(--accent-border);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.mini-close {
+  padding: 9px 12px;
+}
+
+.cit-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+}
+
+.option-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.premium-file-card {
+  gap: 16px;
+}
+
+.file-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.file-info strong,
+.file-date,
+.citation-card p,
+.assistant-message p,
+.message-card p {
+  overflow-wrap: anywhere;
+}
+
+.empty-card {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.empty-card-short {
+  min-height: 200px;
+}
+
+.empty-card-tall {
+  min-height: 300px;
+}
+
+.main-tabs {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  justify-content: flex-start;
+  margin: 0;
+  scrollbar-width: none;
+}
+
+.main-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+.main-tabs .tab-button,
+.topbar-actions .ghost-button {
+  white-space: nowrap;
+}
+
+.topbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.nav-buttons,
+.button-group {
+  flex-wrap: wrap;
+}
+
+.nav-buttons button,
+.button-group button {
+  min-height: 42px;
+}
+
+.mini-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.mini-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.question-header,
+.composer-actions {
+  flex-wrap: wrap;
+}
+
+.chat-dock-shell {
+  max-height: calc(100dvh - 32px);
+}
+
+.chat-scroll,
+.mini-deck-scroll {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 1024px) {
+  .app-shell {
+    width: 100%;
+    padding: 28px 20px 200px;
+    gap: 24px;
+  }
+
+  .auth-layout,
+  .view-grid,
+  .hero-card {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-card,
+  .view-container {
+    max-width: 100%;
+  }
+
+  .topbar {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+
+  .topbar-actions {
+    justify-content: flex-start;
+  }
+
+  .topbar,
+  .panel,
+  .hero-card,
+  .auth-card {
+    padding: 28px;
+  }
+
+  .premium-result {
+    gap: 24px;
+  }
+}
+
+@media (max-width: 760px) {
+  .app-shell {
+    padding: 20px 16px 186px;
+    gap: 20px;
+  }
+
+  .auth-shell {
+    padding: 16px;
+  }
+
+  .topbar,
+  .panel,
+  .hero-card,
+  .auth-card {
+    padding: 22px;
+    border-radius: 24px;
+  }
+
+  .brand-row {
+    align-items: flex-start;
+  }
+
+  .brand-row h1 {
+    font-size: 1.25rem;
+  }
+
+  .topbar-actions {
+    width: 100%;
+    gap: 10px;
+  }
+
+  .topbar-actions .ghost-button {
+    flex: 1 1 180px;
+    justify-content: center;
+  }
+
+  .main-tabs,
+  .auth-tabs {
+    width: 100%;
+    margin: 0;
+  }
+
+  .tab-button {
+    flex: 0 0 auto;
+    padding: 10px 16px;
+    font-size: 0.88rem;
+  }
+
+  .split-fields,
+  .options-grid,
+  .citation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .premium-file-card,
+  .premium-result,
+  .question-header,
+  .chat-stage-top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .file-meta {
+    width: 100%;
+  }
+
+  .chat-stage-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .flashcard-card.premium-card {
+    min-height: 0;
+    padding: 28px 22px !important;
+  }
+
+  .card-content h3 {
+    font-size: 1.3rem;
+  }
+
+  .card-content p,
+  .premium-result p {
+    font-size: 1rem;
+  }
+
+  .nav-buttons,
+  .button-group {
+    width: 100%;
+  }
+
+  .nav-buttons button,
+  .button-group button {
+    flex: 1 1 140px;
+    justify-content: center;
+  }
+
+  .chat-dock {
+    width: calc(100vw - 24px);
+    bottom: 12px;
+  }
+
+  .chat-dock.expanded .chat-dock-shell {
+    height: min(78dvh, 720px);
+    border-radius: 22px;
+  }
+
+  .chat-dock.expanded .chat-scroll {
+    padding: 20px 18px 10px;
+  }
+
+  .chat-composer-wrap {
+    padding: 8px 10px 10px;
+  }
+
+  .chat-dock.expanded .chat-composer-wrap {
+    padding: 10px 18px 16px;
+  }
+
+  .composer-actions {
+    align-items: center;
+  }
+
+  .composer-meta {
+    max-width: 100%;
+  }
+
+  .message-card {
+    max-width: 100%;
+  }
+}
+
+@media (max-width: 520px) {
+  .app-shell {
+    padding: 14px 12px 174px;
+  }
+
+  .topbar,
+  .panel,
+  .hero-card,
+  .auth-card {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .logo-mark {
+    width: 40px;
+    height: 40px;
+  }
+
+  .topbar-actions .ghost-button {
+    flex: 1 1 calc(50% - 8px);
+    padding: 10px 14px;
+    font-size: 0.88rem;
+  }
+
+  .tab-button {
+    padding: 9px 14px;
+    gap: 6px;
+  }
+
+  .tab-button svg,
+  .primary-button svg,
+  .ghost-button svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .question-text {
+    font-size: 1.05rem;
+  }
+
+  .chat-dock {
+    width: calc(100vw - 16px);
+    bottom: 8px;
+  }
+
+  .chat-dock.expanded .chat-dock-shell {
+    height: calc(100dvh - 16px);
+    border-radius: 20px;
+  }
+
+  .chat-empty,
+  .chat-dock.expanded .chat-scroll {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .chat-composer-wrap,
+  .chat-dock.expanded .chat-composer-wrap {
+    padding: 8px 12px 12px;
+  }
+
+  .composer-inner textarea {
+    font-size: 0.96rem;
+  }
+
+  .composer-meta {
+    font-size: 0.72rem;
+    padding: 5px 8px;
+  }
+
+  .send-circle {
+    width: 36px;
+    height: 36px;
+  }
+
+  .empty-card-short,
+  .empty-card-tall {
+    min-height: 220px;
+  }
+}
+
 
 
 

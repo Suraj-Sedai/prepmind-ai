@@ -584,7 +584,7 @@ function App() {
               <input onChange={(event) => setCourseName(event.target.value)} placeholder="e.g. Biology, History..." value={courseName} />
             </label>
             <label className="file-upload-zone">
-              <div className="icon-badge" style={{ margin: '0 auto 8px' }}>
+              <div className="icon-badge upload-zone-icon">
                 <AppIcon name="upload" />
               </div>
               <span className="file-label">Select Study File</span>
@@ -641,7 +641,7 @@ function App() {
                 </article>
               ))
             ) : (
-              <article className="empty-card" style={{ minHeight: '200px' }}>
+              <article className="empty-card empty-card-short">
                 <div className="icon-badge large">
                   <AppIcon name="file" />
                 </div>
@@ -805,7 +805,7 @@ function App() {
               Specific Topic
               <input onChange={(event) => setFlashcardTopic(event.target.value)} placeholder="e.g. Mitochondria, Civil War..." value={flashcardTopic} />
             </label>
-            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="form-row split-fields">
               <label>
                 Quantity
                 <input max={20} min={1} onChange={(event) => setFlashcardCount(Number(event.target.value))} type="number" value={flashcardCount} />
@@ -892,7 +892,7 @@ function App() {
               </div>
             </div>
           ) : (
-            <article className="empty-card" style={{ minHeight: '300px' }}>
+            <article className="empty-card empty-card-tall">
               <div className="icon-badge large">
                 <AppIcon name="cards" />
               </div>
@@ -922,7 +922,7 @@ function App() {
               Focus Topic
               <input onChange={(event) => setQuizTopic(event.target.value)} placeholder="Leave blank for comprehensive" value={quizTopic} />
             </label>
-            <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="form-row split-fields">
               <label>
                 Questions
                 <input max={20} min={1} onChange={(event) => setQuizCount(Number(event.target.value))} type="number" value={quizCount} />
@@ -1003,7 +1003,7 @@ function App() {
               ) : null}
             </div>
           ) : (
-            <article className="empty-card" style={{ minHeight: '300px' }}>
+            <article className="empty-card empty-card-tall">
               <div className="icon-badge large">
                 <AppIcon name="quiz" />
               </div>
