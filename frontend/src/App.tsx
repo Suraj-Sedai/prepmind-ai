@@ -1,12 +1,13 @@
 import { startTransition, useEffect, useState } from "react";
-import type { FormEvent, ReactNode } from "react";
-import "./App.css";
+import type { DragEvent, FormEvent, ReactNode } from "react";
 import logoMark from "./assets/prepmind-mark.svg";
 import {
   askQuestion,
   deleteDocument,
+  fetchDashboard,
   fetchDocuments,
   fetchFlashcards,
+  fetchProgress,
   fetchSession,
   fetchStatus,
   generateFlashcards,
@@ -16,173 +17,77 @@ import {
   rateFlashcard,
   registerUser,
   submitQuiz,
+  updateProfile,
   uploadDocument,
 } from "./api";
-import type { AskResponse, DocumentItem, FlashcardItem, QuizQuestion, QuizSubmitResponse, User } from "./types";
+import type {
+  AskResponse,
+  DashboardResponse,
+  DocumentItem,
+  FlashcardItem,
+  ProgressResponse,
+  QuizQuestion,
+  QuizSubmitResponse,
+  User,
+} from "./types";
+import { Icon } from "./components/common/Icon";
+import type { IconName } from "./components/common/Icon";
+import { Layout } from "./components/layout/Layout";
+import type { ViewKey } from "./components/layout/Sidebar";
 
-type ViewKey = "upload" | "flashcards" | "quiz";
 type AuthMode = "login" | "register";
-type ThemeMode = "light" | "dark";
 type Difficulty = "easy" | "medium" | "hard";
+type MaterialFilter = "all" | "pdf" | "docx" | "txt";
 type WorkspaceSnapshot = {
   documents: DocumentItem[];
   flashcards: FlashcardItem[];
+  dashboard: DashboardResponse | null;
+  progress: ProgressResponse | null;
 };
 type ChatExchange = {
   question: string;
   answer: string;
   citations: AskResponse["citations"];
 };
-type IconName =
-  | "dashboard"
-  | "upload"
-  | "chat"
-  | "cards"
-  | "quiz"
-  | "moon"
-  | "logout"
-  | "refresh"
-  | "file"
-  | "spark"
-  | "plus"
-  | "chevron"
-  | "mic"
-  | "send"
-  | "user"
-  | "settings"
-  | "trend";
 
 const views: Array<{ key: ViewKey; label: string; icon: IconName }> = [
-  { key: "upload", label: "Library", icon: "upload" },
-  { key: "flashcards", label: "Study", icon: "cards" },
-  { key: "quiz", label: "Quiz", icon: "quiz" },
+  { key: "dashboard", label: "Dashboard", icon: "dashboard" },
+  { key: "materials", label: "Materials", icon: "upload" },
+  { key: "chat", label: "AI Chat", icon: "chat" },
+  { key: "flashcards", label: "Flashcards", icon: "cards" },
+  { key: "quizzes", label: "Quizzes", icon: "quiz" },
+  { key: "progress", label: "Progress", icon: "trend" },
+  { key: "settings", label: "Settings", icon: "settings" },
 ];
 
-const chatSuggestions = [
-  "Summarize my uploaded notes.",
-  "Explain this topic in simple words.",
-  "Ask me a practice question.",
+const materialFilters: Array<{ key: MaterialFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "pdf", label: "PDF" },
+  { key: "docx", label: "Docs" },
+  { key: "txt", label: "Text" },
 ];
 
-function AppIcon({ name, style }: { name: IconName; style?: React.CSSProperties }) {
-  const stroke = {
-    fill: "none",
-    stroke: "currentColor",
-    strokeWidth: 1.8,
-    strokeLinecap: "round" as const,
-    strokeLinejoin: "round" as const,
-  };
+const sampleStudyCards = [
+  { subject: "Biology", title: "Photosynthesis", progress: 68 },
+  { subject: "Computer Science", title: "Data Structures", progress: 45 },
+  { subject: "Anatomy", title: "Muscular System", progress: 60 },
+];
 
-  return (
-    <svg aria-hidden="true" style={style} viewBox="0 0 24 24">
-      {name === "dashboard" ? (
-        <>
-          <rect x="3" y="3" width="7" height="7" rx="1" {...stroke} />
-          <rect x="14" y="3" width="7" height="7" rx="1" {...stroke} />
-          <rect x="14" y="14" width="7" height="7" rx="1" {...stroke} />
-          <rect x="3" y="14" width="7" height="7" rx="1" {...stroke} />
-        </>
-      ) : null}
-      {name === "upload" ? (
-        <>
-          <path d="M12 15V4.5" {...stroke} />
-          <path d="M8 8.5L12 4.5L16 8.5" {...stroke} />
-          <path d="M4 16.5V18.5C4 19.6 4.9 20.5 6 20.5H18C19.1 20.5 20 19.6 20 18.5V16.5" {...stroke} />
-        </>
-      ) : null}
-      {name === "chat" ? (
-        <>
-          <path d="M12 3.5C7.3 3.5 3.5 6.9 3.5 11.1C3.5 13.2 4.5 15 6.1 16.2L5.2 20.5L9.3 18.3C10.2 18.5 11.1 18.6 12 18.6C16.7 18.6 20.5 15.2 20.5 11.1C20.5 7 16.7 3.5 12 3.5Z" {...stroke} />
-          <path d="M8.5 10.5H15.5" {...stroke} />
-          <path d="M8.5 13.5H13.5" {...stroke} />
-        </>
-      ) : null}
-      {name === "cards" ? (
-        <>
-          <rect x="5" y="6" width="12" height="10" rx="2" {...stroke} />
-          <path d="M8 3.5H18.5C19.6 3.5 20.5 4.4 20.5 5.5V14" {...stroke} />
-          <path d="M8 10.5H14" {...stroke} />
-        </>
-      ) : null}
-      {name === "quiz" ? (
-        <>
-          <path d="M8.5 7.5H18.5" {...stroke} />
-          <path d="M8.5 12H18.5" {...stroke} />
-          <path d="M8.5 16.5H13.5" {...stroke} />
-          <circle cx="5.5" cy="7.5" r="1.25" {...stroke} />
-          <circle cx="5.5" cy="12" r="1.25" {...stroke} />
-          <circle cx="5.5" cy="16.5" r="1.25" {...stroke} />
-        </>
-      ) : null}
-      {name === "moon" ? (
-        <path d="M16.5 4.2C15.8 4 15.1 3.9 14.3 3.9C9.8 3.9 6.1 7.6 6.1 12.1C6.1 16.6 9.8 20.3 14.3 20.3C17.9 20.3 21 18 22 14.8C21.2 15 20.5 15.1 19.7 15.1C15.2 15.1 11.5 11.4 11.5 6.9C11.5 5.9 11.7 5 12 4.2" {...stroke} />
-      ) : null}
-      {name === "logout" ? (
-        <>
-          <path d="M10 4.5H6C4.9 4.5 4 5.4 4 6.5V17.5C4 18.6 4.9 19.5 6 19.5H10" {...stroke} />
-          <path d="M14.5 8.5L19 12L14.5 15.5" {...stroke} />
-          <path d="M9 12H19" {...stroke} />
-        </>
-      ) : null}
-      {name === "refresh" ? (
-        <>
-          <path d="M19.5 8.5C18 5.8 15.2 4 12 4C7.3 4 3.5 7.8 3.5 12.5C3.5 17.2 7.3 21 12 21C15.8 21 19 18.5 20.1 15" {...stroke} />
-          <path d="M19.5 4.5V8.8H15.2" {...stroke} />
-        </>
-      ) : null}
-      {name === "file" ? (
-        <>
-          <path d="M8 3.5H14.5L19 8V18.5C19 19.6 18.1 20.5 17 20.5H8C6.9 20.5 6 19.6 6 18.5V5.5C6 4.4 6.9 3.5 8 3.5Z" {...stroke} />
-          <path d="M14 3.5V8.5H19" {...stroke} />
-        </>
-      ) : null}
-      {name === "spark" ? (
-        <>
-          <path d="M12 3.5L13.8 8.2L18.5 10L13.8 11.8L12 16.5L10.2 11.8L5.5 10L10.2 8.2L12 3.5Z" {...stroke} />
-          <path d="M18 16L18.8 18.2L21 19L18.8 19.8L18 22L17.2 19.8L15 19L17.2 18.2L18 16Z" {...stroke} />
-        </>
-      ) : null}
-      {name === "plus" ? (
-        <>
-          <path d="M12 5V19" {...stroke} />
-          <path d="M5 12H19" {...stroke} />
-        </>
-      ) : null}
-      {name === "chevron" ? <path d="M7.5 10L12 14.5L16.5 10" {...stroke} /> : null}
-      {name === "mic" ? (
-        <>
-          <path d="M12 15.5C10.3 15.5 9 14.2 9 12.5V8.5C9 6.8 10.3 5.5 12 5.5C13.7 5.5 15 6.8 15 8.5V12.5C15 14.2 13.7 15.5 12 15.5Z" {...stroke} />
-          <path d="M6.5 11.5V12C6.5 15 8.9 17.5 12 17.5C15.1 17.5 17.5 15 17.5 12V11.5" {...stroke} />
-          <path d="M12 17.5V20" {...stroke} />
-        </>
-      ) : null}
-      {name === "send" ? (
-        <>
-          <path d="M20 4L10.5 13.5" {...stroke} />
-          <path d="M20 4L14 20L10.5 13.5L4 10L20 4Z" {...stroke} />
-        </>
-      ) : null}
-      {name === "user" ? (
-        <>
-          <path d="M19 21V19C19 17.9 18.1 17 17 17H7C5.9 17 5 17.9 5 19V21" {...stroke} />
-          <circle cx="12" cy="7" r="4" {...stroke} />
-        </>
-      ) : null}
-      {name === "trend" ? (
-        <>
-          <path d="M22 12H18L15 21L9 3L6 12H2" {...stroke} />
-        </>
-      ) : null}
-      {name === "settings" ? (
-        <>
-          <circle cx="12" cy="12" r="3" {...stroke} />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" {...stroke} />
-        </>
-      ) : null}
-    </svg>
-  );
-}
+const sampleDecks = [
+  { subject: "Biology", title: "Photosynthesis", count: 24 },
+  { subject: "Computer Science", title: "Data Structures", count: 18 },
+  { subject: "Anatomy", title: "Muscular System", count: 20 },
+];
 
+const sampleWeakTopics = [
+  { topic_name: "Integrals", course: "Calculus", mastery_score: 38, state: "Needs Review" },
+  { topic_name: "Pointers", course: "Computer Science", mastery_score: 42, state: "Needs Review" },
+  { topic_name: "Photosynthesis", course: "Biology", mastery_score: 72, state: "Improving" },
+  { topic_name: "Muscular System", course: "Anatomy", mastery_score: 65, state: "Improving" },
+];
+
+const chatSuggestions = ["Summarize", "Explain Simply", "Make Flashcards", "Create Quiz"] as const;
+const supportedUploadExtensions = [".pdf", ".docx", ".txt"];
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -192,8 +97,30 @@ function formatDate(value: string) {
   });
 }
 
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "Size unknown";
+  }
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+  return `${size.toFixed(size >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`;
+}
+
 function isValidEmail(value: string) {
   return /\S+@\S+\.\S+/.test(value);
+}
+
+function normalizeDifficulty(value: string): Difficulty {
+  return value === "easy" || value === "hard" ? value : "medium";
+}
+
+function isSupportedUploadFile(file: File) {
+  return supportedUploadExtensions.some((extension) => file.name.toLowerCase().endsWith(extension));
 }
 
 function renderInlineFormatting(text: string): ReactNode[] {
@@ -250,43 +177,106 @@ function renderAnswerContent(text: string) {
   });
 }
 
+function PageHeader({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="page-header">
+      <div>
+        <h1>{title}</h1>
+        <p>{subtitle}</p>
+      </div>
+      {action ? <div className="page-header-action">{action}</div> : null}
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon, tone }: { label: string; value: string; icon: IconName; tone?: string }) {
+  return (
+    <article className={`stat-card ${tone ?? ""}`}>
+      <div className="stat-icon">
+        <Icon name={icon} />
+      </div>
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+      </div>
+    </article>
+  );
+}
+
+function ProgressBar({ value, tone = "blue" }: { value: number; tone?: "blue" | "green" | "orange" }) {
+  const safeValue = Math.max(0, Math.min(100, value));
+  return (
+    <div className="progress-track" aria-label={`${safeValue}% complete`}>
+      <div className={`progress-fill ${tone}`} style={{ width: `${safeValue}%` }} />
+    </div>
+  );
+}
+
+function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+}: {
+  icon: IconName;
+  title: string;
+  description: string;
+  action?: ReactNode;
+}) {
+  return (
+    <article className="empty-state">
+      <div className="icon-badge large">
+        <Icon name={icon} />
+      </div>
+      <strong>{title}</strong>
+      <p>{description}</p>
+      {action ? <div>{action}</div> : null}
+    </article>
+  );
+}
+
 function App() {
-  const [theme, setTheme] = useState<ThemeMode>(() => {
-    if (typeof window === "undefined") {
-      return "light";
-    }
-    return window.localStorage.getItem("prepmind-theme") === "dark" ? "dark" : "light";
-  });
   const [sessionChecked, setSessionChecked] = useState(false);
   const [status, setStatus] = useState<"online" | "offline">("offline");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeView, setActiveView] = useState<ViewKey>("upload");
+  const [activeView, setActiveView] = useState<ViewKey>("dashboard");
   const [authMode, setAuthMode] = useState<AuthMode>("login");
   const [busyKey, setBusyKey] = useState<string | null>(null);
 
   const [authName, setAuthName] = useState("");
   const [authEmail, setAuthEmail] = useState("");
   const [authPassword, setAuthPassword] = useState("");
-  const [authMessage, setAuthMessage] = useState("Sign in to use uploads, chat, flashcards, and quiz.");
+  const [authMessage, setAuthMessage] = useState("Sign in to upload notes, ask AI, and practice.");
   const [workspaceMessage, setWorkspaceMessage] = useState("Loading workspace...");
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [courseName, setCourseName] = useState("Biology 101");
+  const [courseName, setCourseName] = useState("Biology");
   const [replaceExisting, setReplaceExisting] = useState(false);
-  const [uploadMessage, setUploadMessage] = useState("Upload notes, PDF, TXT, or DOCX files.");
+  const [materialFilter, setMaterialFilter] = useState<MaterialFilter>("all");
+  const [uploadMessage, setUploadMessage] = useState("PDF, DOCX, and TXT files are supported.");
+  const [uploadDragging, setUploadDragging] = useState(false);
 
   const [question, setQuestion] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatExchange[]>([]);
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
-  const [chatExpanded, setChatExpanded] = useState(false);
 
   const [flashcards, setFlashcards] = useState<FlashcardItem[]>([]);
   const [flashcardTopic, setFlashcardTopic] = useState("");
   const [flashcardCount, setFlashcardCount] = useState(6);
   const [flashcardDifficulty, setFlashcardDifficulty] = useState<Difficulty>("medium");
-  const [flashcardMessage, setFlashcardMessage] = useState("Generate a flashcard deck from your material.");
+  const [flashcardMessage, setFlashcardMessage] = useState("Generate flashcards from your uploaded materials.");
   const [activeFlashcardIndex, setActiveFlashcardIndex] = useState(0);
+  const [showFlashcardAnswer, setShowFlashcardAnswer] = useState(false);
 
   const [quizTopic, setQuizTopic] = useState("");
   const [quizCount, setQuizCount] = useState(5);
@@ -294,42 +284,61 @@ function App() {
   const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
   const [quizAnswers, setQuizAnswers] = useState<Record<number, string>>({});
   const [quizResult, setQuizResult] = useState<QuizSubmitResponse | null>(null);
-  const [quizMessage, setQuizMessage] = useState("Generate a simple quiz from your notes.");
+  const [quizMessage, setQuizMessage] = useState("Create a quiz from your notes to test yourself.");
+  const [activeQuizIndex, setActiveQuizIndex] = useState(0);
 
-  useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-    window.localStorage.setItem("prepmind-theme", theme);
-  }, [theme]);
+  const [dashboard, setDashboard] = useState<DashboardResponse | null>(null);
+  const [progress, setProgress] = useState<ProgressResponse | null>(null);
+
+  const [settingsName, setSettingsName] = useState("");
+  const [settingsDifficulty, setSettingsDifficulty] = useState<Difficulty>("medium");
+  const [settingsMessage, setSettingsMessage] = useState("Profile and study preferences.");
+  const [emailReminders, setEmailReminders] = useState(true);
+  const [weeklySummary, setWeeklySummary] = useState(true);
 
   function syncUserState(user: User | null) {
     setCurrentUser(user);
     if (!user) {
       setFlashcardDifficulty("medium");
       setQuizDifficulty("medium");
+      setSettingsName("");
+      setSettingsDifficulty("medium");
       return;
     }
-    const difficulty = user.preferred_difficulty as Difficulty;
+    const difficulty = normalizeDifficulty(user.preferred_difficulty);
     setFlashcardDifficulty(difficulty);
     setQuizDifficulty(difficulty);
+    setSettingsName(user.name);
+    setSettingsDifficulty(difficulty);
   }
 
   async function loadWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
-    const [documentPayload, flashcardPayload] = await Promise.all([fetchDocuments(), fetchFlashcards()]);
+    const [documentPayload, flashcardPayload, dashboardPayload, progressPayload] = await Promise.all([
+      fetchDocuments(),
+      fetchFlashcards(),
+      fetchDashboard().catch(() => null),
+      fetchProgress().catch(() => null),
+    ]);
     return {
       documents: documentPayload.items,
       flashcards: flashcardPayload.items,
+      dashboard: dashboardPayload,
+      progress: progressPayload,
     };
   }
 
   function clearWorkspace() {
     startTransition(() => {
       setDocuments([]);
+      setSelectedDocumentId(null);
       setFlashcards([]);
       setChatHistory([]);
       setPendingQuestion(null);
       setQuizQuestions([]);
       setQuizAnswers({});
       setQuizResult(null);
+      setDashboard(null);
+      setProgress(null);
     });
   }
 
@@ -337,6 +346,14 @@ function App() {
     startTransition(() => {
       setDocuments(snapshot.documents);
       setFlashcards(snapshot.flashcards);
+      setDashboard(snapshot.dashboard);
+      setProgress(snapshot.progress);
+      setSelectedDocumentId((current) => {
+        if (current && snapshot.documents.some((document) => document.id === current)) {
+          return current;
+        }
+        return snapshot.documents[0]?.id ?? null;
+      });
     });
   }
 
@@ -431,6 +448,7 @@ function App() {
       applyWorkspaceSnapshot(snapshot);
       setAuthMessage(payload.message);
       setWorkspaceMessage("Workspace ready.");
+      setActiveView("dashboard");
     } catch (error) {
       console.error(error);
       setAuthMessage(error instanceof Error ? error.message : "Authentication failed.");
@@ -450,7 +468,7 @@ function App() {
       setAuthPassword("");
       setWorkspaceMessage("Signed out.");
       setAuthMessage("Sign in again to continue.");
-      setActiveView("upload");
+      setActiveView("dashboard");
     } catch (error) {
       console.error(error);
       setAuthMessage(error instanceof Error ? error.message : "Logout failed.");
@@ -462,23 +480,44 @@ function App() {
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedFile) {
-      setUploadMessage("Choose a file first.");
+      setUploadMessage("Choose a PDF, DOCX, or TXT file first.");
       return;
     }
     setBusyKey("upload");
-    setUploadMessage("Uploading and indexing...");
+    setUploadMessage("Uploading and processing your material...");
     try {
       const payload = await uploadDocument(selectedFile, courseName, replaceExisting);
       setSelectedFile(null);
       setReplaceExisting(false);
+      setSelectedDocumentId(payload.document.id);
       setUploadMessage(payload.message);
       await refreshWorkspace("Refreshing after upload...");
     } catch (error) {
       console.error(error);
-      setUploadMessage(error instanceof Error ? error.message : "Upload failed.");
+      setUploadMessage(error instanceof Error ? error.message : "We could not process this file. Please upload a PDF, DOCX, or TXT file.");
     } finally {
       setBusyKey(null);
     }
+  }
+
+  function handleSelectedUploadFile(file: File | null | undefined) {
+    if (!file) {
+      setSelectedFile(null);
+      return;
+    }
+    if (!isSupportedUploadFile(file)) {
+      setSelectedFile(null);
+      setUploadMessage("We could not process this file. Please upload a PDF, DOCX, or TXT file.");
+      return;
+    }
+    setSelectedFile(file);
+    setUploadMessage(`${file.name} is ready to upload.`);
+  }
+
+  function handleUploadDrop(event: DragEvent<HTMLLabelElement>) {
+    event.preventDefault();
+    setUploadDragging(false);
+    handleSelectedUploadFile(event.dataTransfer.files[0]);
   }
 
   async function handleDeleteDocument(documentId: number) {
@@ -486,6 +525,9 @@ function App() {
     try {
       const payload = await deleteDocument(documentId);
       setUploadMessage(payload.message);
+      if (selectedDocumentId === documentId) {
+        setSelectedDocumentId(null);
+      }
       await refreshWorkspace("Refreshing after delete...");
     } catch (error) {
       console.error(error);
@@ -499,7 +541,6 @@ function App() {
     event.preventDefault();
     const submittedQuestion = question.trim();
     if (!submittedQuestion) return;
-    setChatExpanded(true);
     setPendingQuestion(submittedQuestion);
     setBusyKey("ask");
     try {
@@ -514,9 +555,10 @@ function App() {
       ]);
       setQuestion("");
       setPendingQuestion(null);
+      void refreshWorkspace("Updating study progress...");
     } catch (error) {
       console.error(error);
-      const message = error instanceof Error ? error.message : "Chat failed.";
+      const message = error instanceof Error ? error.message : "AI response failed. Please try again.";
       setChatHistory((current) => [
         ...current,
         {
@@ -544,7 +586,9 @@ function App() {
       });
       setFlashcards(payload.items);
       setActiveFlashcardIndex(0);
+      setShowFlashcardAnswer(false);
       setFlashcardMessage(payload.message);
+      void refreshWorkspace("Updating flashcard deck...");
     } catch (error) {
       console.error(error);
       setFlashcardMessage(error instanceof Error ? error.message : "Flashcard generation failed.");
@@ -553,16 +597,20 @@ function App() {
     }
   }
 
-  async function handleRateFlashcard(flashcardId: number, rating: Difficulty) {
-    setBusyKey(`rate-${flashcardId}`);
+  async function handleRateCurrentFlashcard(rating: Difficulty) {
+    const currentFlashcard = flashcards[activeFlashcardIndex];
+    if (!currentFlashcard) return;
+    setBusyKey("flashcard-rate");
     try {
-      const updated = await rateFlashcard(flashcardId, rating);
-      setFlashcards((current) => current.map((card) => (card.id === flashcardId ? updated : card)));
+      const updated = await rateFlashcard(currentFlashcard.id, rating);
+      setFlashcards((current) => current.map((card) => (card.id === updated.id ? updated : card)));
       setFlashcardMessage(`Marked as ${rating}.`);
-      await refreshWorkspace("Updating mastery...");
+      setShowFlashcardAnswer(false);
+      setActiveFlashcardIndex((value) => Math.min(value + 1, Math.max(flashcards.length - 1, 0)));
+      void refreshWorkspace("Updating mastery levels...");
     } catch (error) {
       console.error(error);
-      setFlashcardMessage(error instanceof Error ? error.message : "Rating failed.");
+      setFlashcardMessage(error instanceof Error ? error.message : "Could not save this flashcard rating.");
     } finally {
       setBusyKey(null);
     }
@@ -581,6 +629,7 @@ function App() {
       setQuizQuestions(payload.questions);
       setQuizAnswers({});
       setQuizResult(null);
+      setActiveQuizIndex(0);
       setQuizMessage(payload.message);
     } catch (error) {
       console.error(error);
@@ -619,466 +668,840 @@ function App() {
     }
   }
 
+  async function handleProfileUpdate(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const normalizedName = settingsName.trim();
+    if (normalizedName.length < 2) {
+      setSettingsMessage("Enter a name with at least 2 characters.");
+      return;
+    }
+    setBusyKey("settings");
+    setSettingsMessage("Saving profile...");
+    try {
+      const payload = await updateProfile({
+        name: normalizedName,
+        preferred_difficulty: settingsDifficulty,
+      });
+      syncUserState(payload.user);
+      setSettingsMessage(payload.message);
+    } catch (error) {
+      console.error(error);
+      setSettingsMessage(error instanceof Error ? error.message : "Profile update failed.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function handleQuickAction(action: (typeof chatSuggestions)[number]) {
+    if (action === "Summarize") {
+      setQuestion("Summarize my uploaded study materials.");
+      return;
+    }
+    if (action === "Explain Simply") {
+      setQuestion("Explain the selected material in simple words.");
+      return;
+    }
+    if (action === "Make Flashcards") {
+      setFlashcardTopic(selectedDocument?.topic_summary.split(",")[0]?.trim() ?? "");
+      setActiveView("flashcards");
+      return;
+    }
+    setQuizTopic(selectedDocument?.topic_summary.split(",")[0]?.trim() ?? "");
+    setActiveView("quizzes");
+  }
+
+  const selectedDocument = documents.find((document) => document.id === selectedDocumentId) ?? documents[0] ?? null;
   const currentFlashcard = flashcards[activeFlashcardIndex] ?? null;
+  const currentQuizQuestion = quizQuestions[activeQuizIndex] ?? null;
+  const currentQuizResult = quizResult?.results[activeQuizIndex] ?? null;
+  const latestCitations = [...chatHistory].reverse().find((entry) => entry.citations.length)?.citations ?? [];
+  const filteredDocuments =
+    materialFilter === "all"
+      ? documents
+      : documents.filter((document) => document.document_type.toLowerCase() === materialFilter);
+  const groupedDecks = Object.values(
+    flashcards.reduce<Record<string, { topic: string; count: number }>>((groups, card) => {
+      const key = card.topic_name || "General";
+      groups[key] = groups[key] ?? { topic: key, count: 0 };
+      groups[key].count += 1;
+      return groups;
+    }, {}),
+  );
 
-  function renderUpload() {
+  function renderDashboard() {
+    const studyStreak = progress ? `${progress.study_streak_days} days` : "12 days";
+    const quizAccuracy = progress ? `${Math.round(progress.quiz_accuracy)}%` : "78%";
+    const weakTopicCount = progress ? progress.topic_mastery.filter((topic) => topic.mastery_score < 70).length : 5;
+    const studyCards = documents.length
+      ? documents.slice(0, 3).map((document, index) => ({
+          subject: document.course_name,
+          title: document.topic_summary.split(",")[0]?.trim() || document.document_name,
+          progress: Math.min(85, 45 + index * 11 + Math.min(document.chunk_count, 8)),
+        }))
+      : sampleStudyCards;
+    const recommendation = dashboard?.recommendations[0];
+    const recommendedTopic = recommendation?.topic ?? "Calculus integrals";
+    const recommendationText = recommendation
+      ? `${recommendation.topic}: ${recommendation.reason}`
+      : "You should review Calculus integrals today because your last quiz score was low.";
+
     return (
-      <section className="view-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Inventory</p>
-              <h2>Upload Materials</h2>
-              <p>Add your PDF, DOCX, or TXT notes to index them for AI.</p>
-            </div>
-          </div>
-          <form className="form-grid" onSubmit={handleUpload}>
-            <label>
-              Course Category
-              <input onChange={(event) => setCourseName(event.target.value)} placeholder="e.g. Biology, History..." value={courseName} />
-            </label>
-            <label className="file-upload-zone">
-              <div className="icon-badge upload-zone-icon">
-                <AppIcon name="upload" />
-              </div>
-              <span className="file-label">Select Study File</span>
-              <input accept=".pdf,.txt,.docx" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} type="file" />
-              <span className="file-name">{selectedFile ? selectedFile.name : "No file selected"}</span>
-            </label>
-            <label className="checkbox-row">
-              <input checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} type="checkbox" />
-              <span>Update existing file in this course</span>
-            </label>
-            <button className="primary-button" disabled={busyKey === "upload"} type="submit">
-              <AppIcon name="upload" />
-              {busyKey === "upload" ? "Processing..." : "Start Upload"}
+      <section className="page-stack">
+        <PageHeader
+          title="Dashboard"
+          subtitle="Welcome back. Continue your study plan today."
+          action={
+            <button className="primary-button" onClick={() => setActiveView("materials")} type="button">
+              <Icon name="upload" />
+              Upload Material
             </button>
-          </form>
-          <p className="helper-text">{uploadMessage}</p>
-        </article>
+          }
+        />
 
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Library</p>
-              <h2>Managed Files</h2>
-              <p>Your processed and indexed material.</p>
-            </div>
+        <div className="stats-grid three">
+          <StatCard label="Study Streak" value={studyStreak} icon="trend" />
+          <StatCard label="Quiz Accuracy" value={quizAccuracy} icon="quiz" tone="green" />
+          <StatCard label="Weak Topics" value={`${weakTopicCount} topics`} icon="spark" tone="orange" />
+        </div>
+
+        <section className="section-block">
+          <div className="section-heading">
+            <h2>Continue Studying</h2>
+            <p>{documents.length ? "Based on your uploaded materials." : "Sample study plan until you upload materials."}</p>
           </div>
-          <div className="stack-list">
-            {documents.length ? (
-              documents.map((document) => (
-                <article className="file-card premium-file-card" key={document.id}>
-                  <div className="file-meta">
-                    <div className="icon-badge">
-                      <AppIcon name="file" />
-                    </div>
-                    <div className="file-info">
-                      <strong>{document.document_name}</strong>
-                      <div className="file-tags">
-                        <span className="tag">{document.course_name}</span>
-                        <span className="tag type">{document.document_type.toUpperCase()}</span>
-                      </div>
-                      <small className="file-date">
-                        Added {formatDate(document.upload_date)} | {document.processing_status}
-                      </small>
-                    </div>
-                  </div>
+          <div className="study-card-grid">
+            {studyCards.map((item) => (
+              <article className="study-card" key={`${item.subject}-${item.title}`}>
+                <span className="small-label">{item.subject}</span>
+                <h3>{item.title}</h3>
+                <ProgressBar value={item.progress} />
+                <div className="card-footer-row">
+                  <span>{item.progress}% complete</span>
                   <button
-                    className="ghost-button danger mini"
-                    disabled={busyKey === `delete-${document.id}`}
-                    onClick={() => handleDeleteDocument(document.id)}
+                    className="secondary-button"
+                    onClick={() => {
+                      setQuestion(`Help me continue studying ${item.title}.`);
+                      setActiveView("chat");
+                    }}
                     type="button"
                   >
-                    <AppIcon name="logout" style={{ width: '14px', height: '14px' }} />
+                    Continue
                   </button>
-                </article>
-              ))
-            ) : (
-              <article className="empty-card empty-card-short">
-                <div className="icon-badge large">
-                  <AppIcon name="file" />
                 </div>
-                <strong>Library is empty.</strong>
-                <p>Upload your first document to get started.</p>
               </article>
-            )}
+            ))}
           </div>
+        </section>
+
+        <article className="recommendation-card">
+          <div className="recommendation-icon">
+            <Icon name="spark" />
+          </div>
+          <div>
+            <span className="small-label">Recommended Next Step</span>
+            <p>{recommendationText}</p>
+          </div>
+          <button
+            className="primary-button"
+            onClick={() => {
+              setQuizTopic(recommendedTopic);
+              setActiveView("quizzes");
+            }}
+            type="button"
+          >
+            Start Practice
+          </button>
         </article>
       </section>
     );
   }
 
-
-  function renderChatDock() {
+  function renderMaterials() {
     return (
-      <div className={chatExpanded ? "chat-dock expanded" : "chat-dock"}>
-        <div className="chat-dock-backdrop" onClick={() => setChatExpanded(false)} />
-        
-        <section className="chat-dock-shell">
-          <div className="chat-dock-body">
-            <div className="chat-scroll">
-              {chatExpanded && (
-                <div className="chat-stage-top">
-                  <div>
-                    <p className="eyebrow chat-eyebrow">Prepmind.ai</p>
-                    <h2>Ask anything</h2>
-                  </div>
-                  <div className="chat-stage-actions">
-                    {chatHistory.length ? (
-                      <button className="ghost-button mini-close" onClick={() => setChatHistory([])} type="button">
-                        Clear
-                      </button>
-                    ) : null}
-                    <button className="ghost-button mini-close" onClick={() => setChatExpanded(false)} type="button">
-                      <AppIcon name="chevron" style={{ transform: "rotate(180deg)" }} />
-                    </button>
-                  </div>
-                </div>
-              )}
-              
-              <div className="chat-history">
-                {chatHistory.length || pendingQuestion ? (
-                  <div className="answer-stack">
-                    {chatHistory.map((entry, index) => (
-                      <div className="answer-stack" key={`${entry.question}-${index}`}>
-                        <article className="message-card user-message">
-                          <p>{entry.question}</p>
-                        </article>
-                        <article className="message-card assistant-message">
-                          <div className="assistant-header">
-                            <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
-                            <span>Prepmind.ai</span>
-                          </div>
-                          <div className="assistant-content">{renderAnswerContent(entry.answer)}</div>
-                        </article>
-                        {entry.citations.length ? (
-                          <div className="citation-grid">
-                            {entry.citations.map((citation, citationIndex) => (
-                              <article className="citation-card" key={`${citation.document_name}-${citationIndex}`}>
-                                <div className="cit-header">
-                                  <AppIcon name="file" style={{ width: "12px", height: "12px" }} />
-                                  <strong>{citation.document_name}</strong>
-                                </div>
-                                <p>{citation.snippet}</p>
-                              </article>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    ))}
-                    {pendingQuestion ? (
-                      <>
-                        <article className="message-card user-message">
-                          <p>{pendingQuestion}</p>
-                        </article>
-                        <article className="message-card assistant-message loading-message">
-                          <div className="assistant-header">
-                            <AppIcon name="spark" style={{ width: "16px", height: "16px" }} />
-                            <span>Prepmind.ai</span>
-                          </div>
-                          <div className="assistant-content">
-                            <p>Thinking...</p>
-                          </div>
-                        </article>
-                      </>
-                    ) : null}
-                  </div>
-                ) : chatExpanded ? (
-                  <div className="chat-empty">
-                    <div className="ai-pulse">
-                      <AppIcon name="spark" />
-                    </div>
-                    <h3>How can I help?</h3>
-                    <p>Ask about your notes, get explanations, or ask a general question.</p>
-                    <div className="chat-suggestion-row">
-                      {chatSuggestions.map((suggestion) => (
-                        <button
-                          className="chat-suggestion-chip"
-                          key={suggestion}
-                          onClick={() => {
-                            setQuestion(suggestion);
-                            setChatExpanded(true);
-                          }}
-                          type="button"
-                        >
-                          {suggestion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            </div>
+      <section className="page-stack">
+        <PageHeader title="Materials" subtitle="Upload notes, PDFs, and study guides." />
 
-            <form className="chat-composer-wrap" onSubmit={handleAsk}>
-              <div className="composer-inner">
-                <textarea
-                  onChange={(event) => setQuestion(event.target.value)}
-                  onFocus={() => setChatExpanded(true)}
-                  placeholder="Message Prepmind.ai..."
-                  rows={1}
-                  value={question}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      e.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                />
-                <div className="composer-actions">
-                  <div className="composer-meta">
-                    <AppIcon name="spark" style={{ width: "14px", height: "14px" }} />
-                    <span>{documents.length ? `${documents.length} notes ready` : "General mode"}</span>
-                  </div>
-                  <button className="send-circle" disabled={busyKey === "ask" || !question.trim()} type="submit">
-                    <AppIcon name="send" />
-                  </button>
-                </div>
-              </div>
+        <section className="materials-layout">
+          <article className="panel">
+            <div className="section-heading">
+              <h2>Upload Material</h2>
+              <p>Drag and drop your file here or click to upload.</p>
+            </div>
+            <form className="form-grid" onSubmit={handleUpload}>
+              <label>
+                Subject
+                <input onChange={(event) => setCourseName(event.target.value)} placeholder="e.g. Biology" value={courseName} />
+              </label>
+              <label
+                className={uploadDragging ? "upload-box dragging" : "upload-box"}
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setUploadDragging(true);
+                }}
+                onDragLeave={() => setUploadDragging(false)}
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={handleUploadDrop}
+              >
+                <span className="upload-icon">
+                  <Icon name="upload" />
+                </span>
+                <strong>{selectedFile ? selectedFile.name : "Drag and drop your files here"}</strong>
+                <span>or click to upload</span>
+                <small>PDF, DOCX, and TXT supported</small>
+                <input accept=".pdf,.txt,.docx" onChange={(event) => handleSelectedUploadFile(event.target.files?.[0])} type="file" />
+              </label>
+              <label className="checkbox-row">
+                <input checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} type="checkbox" />
+                <span>Replace an existing file with the same name</span>
+              </label>
+              <button className="primary-button" disabled={busyKey === "upload"} type="submit">
+                <Icon name="upload" />
+                {busyKey === "upload" ? "Processing..." : "Upload Material"}
+              </button>
             </form>
-          </div>
-        </section>
-      </div>
-    );
-  }
+            <p className="helper-text">{uploadMessage}</p>
+          </article>
 
-
-
-  function renderFlashcards() {
-    return (
-      <section className="view-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Flashcards</p>
-              <h2>Study Smart.</h2>
-              <p>Generate targeted flashcards from your material.</p>
-            </div>
-          </div>
-          <form className="form-grid" onSubmit={handleGenerateFlashcards}>
-            <label>
-              Specific Topic
-              <input onChange={(event) => setFlashcardTopic(event.target.value)} placeholder="e.g. Mitochondria, Civil War..." value={flashcardTopic} />
-            </label>
-            <div className="form-row split-fields">
-              <label>
-                Quantity
-                <input max={20} min={1} onChange={(event) => setFlashcardCount(Number(event.target.value))} type="number" value={flashcardCount} />
-              </label>
-              <label>
-                Level
-                <select onChange={(event) => setFlashcardDifficulty(event.target.value as Difficulty)} value={flashcardDifficulty}>
-                  <option value="easy">Beginner</option>
-                  <option value="medium">Intermediate</option>
-                  <option value="hard">Advanced</option>
-                </select>
-              </label>
-            </div>
-            <button className="primary-button" disabled={busyKey === "flashcards"} type="submit">
-              <AppIcon name="spark" />
-              {busyKey === "flashcards" ? "Creating Deck..." : "Generate Deck"}
-            </button>
-          </form>
-          <p className="helper-text">{flashcardMessage}</p>
-        </article>
-
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Active Session</p>
-              <h2>Flashcard Deck</h2>
-            </div>
-          </div>
-          {currentFlashcard ? (
-            <div className="answer-stack">
-              <article className="flashcard-card premium-card">
-                <div className="card-header">
-                  <span className="pill">{currentFlashcard.topic_name}</span>
-                  <span className="card-counter">{activeFlashcardIndex + 1} / {flashcards.length}</span>
-                </div>
-                <div className="card-content">
-                  <h3>{currentFlashcard.question}</h3>
-                  <div className="card-divider" />
-                  <p>{currentFlashcard.answer}</p>
-                </div>
-                <div className="card-actions">
-                  <div className="nav-buttons">
-                    <button
-                      className="ghost-button"
-                      disabled={activeFlashcardIndex === 0}
-                      onClick={() => setActiveFlashcardIndex((value) => Math.max(0, value - 1))}
-                      type="button"
-                    >
-                      <AppIcon name="chevron" style={{ transform: 'rotate(90deg)' }} />
-                      Back
-                    </button>
-                    <button
-                      className="ghost-button"
-                      disabled={activeFlashcardIndex >= flashcards.length - 1}
-                      onClick={() => setActiveFlashcardIndex((value) => Math.min(flashcards.length - 1, value + 1))}
-                      type="button"
-                    >
-                      Next
-                      <AppIcon name="chevron" style={{ transform: 'rotate(-90deg)' }} />
-                    </button>
-                  </div>
-                  <div className="rating-buttons">
-                    <p className="small-label">Rate this card:</p>
-                    <div className="button-group">
-                      <button className="chip-button" onClick={() => handleRateFlashcard(currentFlashcard.id, "easy")} type="button">Easy</button>
-                      <button className="chip-button" onClick={() => handleRateFlashcard(currentFlashcard.id, "medium")} type="button">Mid</button>
-                      <button className="chip-button" onClick={() => handleRateFlashcard(currentFlashcard.id, "hard")} type="button">Hard</button>
-                    </div>
-                  </div>
-                </div>
-              </article>
-              <div className="mini-deck-scroll">
-                {flashcards.map((card, index) => (
+          <article className="panel">
+            <div className="section-heading compact">
+              <div>
+                <h2>Uploaded Files</h2>
+                <p>Your processed and indexed materials.</p>
+              </div>
+              <div className="filter-tabs" aria-label="Material filters">
+                {materialFilters.map((filter) => (
                   <button
-                    className={index === activeFlashcardIndex ? "mini-card active" : "mini-card"}
-                    key={card.id}
-                    onClick={() => setActiveFlashcardIndex(index)}
+                    className={materialFilter === filter.key ? "filter-tab active" : "filter-tab"}
+                    key={filter.key}
+                    onClick={() => setMaterialFilter(filter.key)}
                     type="button"
                   >
-                    <span className="dot" />
-                    <strong>{card.topic_name}</strong>
+                    {filter.label}
                   </button>
                 ))}
               </div>
             </div>
-          ) : (
-            <article className="empty-card empty-card-tall">
-              <div className="icon-badge large">
-                <AppIcon name="cards" />
-              </div>
-              <strong>No active deck.</strong>
-              <p>Generate flashcards to start your study session.</p>
-            </article>
-          )}
-        </article>
+            <div className="stack-list">
+              {filteredDocuments.length ? (
+                filteredDocuments.map((document) => (
+                  <article className="file-card" key={document.id}>
+                    <div className="file-main">
+                      <div className="icon-badge">
+                        <Icon name="file" />
+                      </div>
+                      <div>
+                        <strong>{document.document_name}</strong>
+                        <p>
+                          {document.course_name} / {document.document_type.toUpperCase()} / {formatDate(document.upload_date)}
+                        </p>
+                        <small>
+                          {document.processing_status} / {formatBytes(document.file_size_bytes)} / {document.chunk_count} chunks
+                        </small>
+                      </div>
+                    </div>
+                    <div className="file-actions">
+                      <button
+                        className="secondary-button"
+                        onClick={() => {
+                          setSelectedDocumentId(document.id);
+                          setActiveView("chat");
+                        }}
+                        type="button"
+                      >
+                        Ask AI
+                      </button>
+                      <button
+                        className="ghost-button danger"
+                        disabled={busyKey === `delete-${document.id}`}
+                        onClick={() => handleDeleteDocument(document.id)}
+                        type="button"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </article>
+                ))
+              ) : (
+                <EmptyState
+                  icon="file"
+                  title="No materials yet"
+                  description="Upload your first PDF, DOCX, or TXT file to start studying."
+                  action={
+                    <button className="secondary-button" onClick={() => setMaterialFilter("all")} type="button">
+                      Show All
+                    </button>
+                  }
+                />
+              )}
+            </div>
+          </article>
+        </section>
       </section>
     );
   }
 
+  function renderChat() {
+    const contextSnippets = latestCitations.length
+      ? latestCitations.slice(0, 3).map((citation) => ({
+          title: citation.page_start ? `Page ${citation.page_start}` : citation.topic_label,
+          text: citation.snippet,
+        }))
+      : selectedDocument
+        ? [
+            {
+              title: selectedDocument.topic_summary ? "Detected topics" : "Selected source",
+              text: selectedDocument.topic_summary || selectedDocument.document_name,
+            },
+          ]
+        : [];
 
-  function renderQuiz() {
     return (
-      <section className="view-grid">
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Assessment</p>
-              <h2>Quiz Generator</h2>
-              <p>Test your knowledge with custom quizzes.</p>
+      <section className="page-stack">
+        <PageHeader title="AI Chat" subtitle="Ask questions based on your uploaded study materials." />
+
+        <section className="chat-layout">
+          <aside className="panel context-panel">
+            <div className="section-heading">
+              <h2>Study Context</h2>
+              <p>Choose the material PrepMind should focus on.</p>
             </div>
-          </div>
-          <form className="form-grid" onSubmit={handleGenerateQuiz}>
-            <label>
-              Focus Topic
-              <input onChange={(event) => setQuizTopic(event.target.value)} placeholder="Leave blank for comprehensive" value={quizTopic} />
-            </label>
-            <div className="form-row split-fields">
+            {documents.length ? (
+              <label className="simple-label">
+                Selected material
+                <select
+                  onChange={(event) => setSelectedDocumentId(Number(event.target.value))}
+                  value={selectedDocument?.id ?? ""}
+                >
+                  {documents.map((document) => (
+                    <option key={document.id} value={document.id}>
+                      {document.document_name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : (
+              <EmptyState
+                icon="upload"
+                title="No study context"
+                description="Upload a material first so answers can use your notes."
+                action={
+                  <button className="secondary-button" onClick={() => setActiveView("materials")} type="button">
+                    Upload Material
+                  </button>
+                }
+              />
+            )}
+            {contextSnippets.length ? (
+              <div className="source-list">
+                {contextSnippets.map((snippet, index) => (
+                  <article className="source-snippet" key={`${snippet.title}-${index}`}>
+                    <strong>{snippet.title}</strong>
+                    <p>{snippet.text}</p>
+                  </article>
+                ))}
+              </div>
+            ) : null}
+            <button className="ghost-button" onClick={() => setActiveView("materials")} type="button">
+              Change Material
+            </button>
+          </aside>
+
+          <article className="panel chat-panel">
+            <div className="quick-actions">
+              {chatSuggestions.map((suggestion) => (
+                <button className="quick-action" key={suggestion} onClick={() => handleQuickAction(suggestion)} type="button">
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
+            <div className="chat-history">
+              {chatHistory.length === 0 && !pendingQuestion ? (
+                <EmptyState
+                  icon="chat"
+                  title="Ask about your notes"
+                  description="Try asking PrepMind to summarize a chapter or explain a concept in simple words."
+                />
+              ) : null}
+              {chatHistory.map((entry, index) => (
+                <div className="message-group" key={`${entry.question}-${index}`}>
+                  <article className="chat-bubble user">
+                    <p>{entry.question}</p>
+                  </article>
+                  <article className="chat-bubble assistant">
+                    <div className="assistant-header">
+                      <Icon name="spark" />
+                      <span>PrepMind AI</span>
+                    </div>
+                    <div className="assistant-content">{renderAnswerContent(entry.answer)}</div>
+                    {entry.citations.length ? (
+                      <p className="sources-line">
+                        Sources:{" "}
+                        {entry.citations
+                          .map((citation) => citation.page_start ? `Page ${citation.page_start}` : citation.topic_label)
+                          .join(", ")}
+                      </p>
+                    ) : null}
+                  </article>
+                </div>
+              ))}
+              {pendingQuestion ? (
+                <div className="message-group">
+                  <article className="chat-bubble user">
+                    <p>{pendingQuestion}</p>
+                  </article>
+                  <article className="chat-bubble assistant">
+                    <div className="assistant-header">
+                      <Icon name="spark" />
+                      <span>Thinking</span>
+                    </div>
+                    <div className="typing-dots">
+                      <span />
+                      <span />
+                      <span />
+                    </div>
+                  </article>
+                </div>
+              ) : null}
+            </div>
+
+            <form className="chat-composer" onSubmit={handleAsk}>
+              <textarea
+                onChange={(event) => setQuestion(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                placeholder="Ask a question about your notes..."
+                rows={2}
+                value={question}
+              />
+              <button className="send-button" disabled={busyKey === "ask" || !question.trim()} type="submit">
+                <Icon name="send" />
+              </button>
+            </form>
+          </article>
+        </section>
+      </section>
+    );
+  }
+
+  function renderFlashcards() {
+    return (
+      <section className="page-stack">
+        <PageHeader title="Flashcards" subtitle="Review key ideas from your materials." />
+
+        <section className="split-layout">
+          <aside className="panel">
+            <div className="section-heading">
+              <h2>Decks</h2>
+              <p>Generate or review a focused card set.</p>
+            </div>
+            <form className="form-grid compact-form" onSubmit={handleGenerateFlashcards}>
               <label>
-                Questions
-                <input max={20} min={1} onChange={(event) => setQuizCount(Number(event.target.value))} type="number" value={quizCount} />
+                Topic
+                <input onChange={(event) => setFlashcardTopic(event.target.value)} placeholder="e.g. Photosynthesis" value={flashcardTopic} />
+              </label>
+              <div className="form-row">
+                <label>
+                  Cards
+                  <input max={20} min={1} onChange={(event) => setFlashcardCount(Number(event.target.value))} type="number" value={flashcardCount} />
+                </label>
+                <label>
+                  Level
+                  <select onChange={(event) => setFlashcardDifficulty(event.target.value as Difficulty)} value={flashcardDifficulty}>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </label>
+              </div>
+              <button className="primary-button" disabled={busyKey === "flashcards"} type="submit">
+                <Icon name="spark" />
+                {busyKey === "flashcards" ? "Generating..." : "Generate Flashcards"}
+              </button>
+            </form>
+            <p className="helper-text">{flashcardMessage}</p>
+            <div className="deck-list">
+              {groupedDecks.length
+                ? groupedDecks.map((deck) => (
+                    <button className="deck-row" key={deck.topic} onClick={() => setFlashcardTopic(deck.topic)} type="button">
+                      <span>{deck.topic}</span>
+                      <small>{deck.count} cards</small>
+                    </button>
+                  ))
+                : sampleDecks.map((deck) => (
+                    <button className="deck-row sample" key={`${deck.subject}-${deck.title}`} onClick={() => setFlashcardTopic(deck.title)} type="button">
+                      <span>{deck.subject} - {deck.title}</span>
+                      <small>{deck.count} sample cards</small>
+                    </button>
+                  ))}
+            </div>
+          </aside>
+
+          <article className="panel flashcard-viewer">
+            {currentFlashcard ? (
+              <>
+                <div className="flashcard-toolbar">
+                  <span>Card {activeFlashcardIndex + 1} of {flashcards.length}</span>
+                  <span className="pill">{currentFlashcard.topic_name}</span>
+                </div>
+                <article className="flashcard-card">
+                  <span className="small-label">Question</span>
+                  <h2>{currentFlashcard.question}</h2>
+                  {showFlashcardAnswer ? (
+                    <div className="answer-box">
+                      <span className="small-label">Answer</span>
+                      <p>{currentFlashcard.answer}</p>
+                    </div>
+                  ) : (
+                    <button className="primary-button" onClick={() => setShowFlashcardAnswer(true)} type="button">
+                      Show Answer
+                    </button>
+                  )}
+                </article>
+                {showFlashcardAnswer ? (
+                  <div className="rating-row">
+                    <button disabled={busyKey === "flashcard-rate"} onClick={() => handleRateCurrentFlashcard("easy")} type="button">
+                      Easy
+                    </button>
+                    <button disabled={busyKey === "flashcard-rate"} onClick={() => handleRateCurrentFlashcard("medium")} type="button">
+                      Medium
+                    </button>
+                    <button disabled={busyKey === "flashcard-rate"} onClick={() => handleRateCurrentFlashcard("hard")} type="button">
+                      Hard
+                    </button>
+                  </div>
+                ) : null}
+                <div className="footer-actions">
+                  <button
+                    className="secondary-button"
+                    disabled={activeFlashcardIndex === 0}
+                    onClick={() => {
+                      setActiveFlashcardIndex((value) => Math.max(0, value - 1));
+                      setShowFlashcardAnswer(false);
+                    }}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={activeFlashcardIndex >= flashcards.length - 1}
+                    onClick={() => {
+                      setActiveFlashcardIndex((value) => Math.min(flashcards.length - 1, value + 1));
+                      setShowFlashcardAnswer(false);
+                    }}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                </div>
+              </>
+            ) : (
+              <EmptyState
+                icon="cards"
+                title="No flashcards yet"
+                description="Generate flashcards from your uploaded materials."
+                action={
+                  <button className="secondary-button" onClick={() => setActiveView("materials")} type="button">
+                    Upload Material
+                  </button>
+                }
+              />
+            )}
+          </article>
+        </section>
+      </section>
+    );
+  }
+
+  function renderQuizzes() {
+    const quizProgress = quizQuestions.length ? ((activeQuizIndex + 1) / quizQuestions.length) * 100 : 0;
+
+    return (
+      <section className="page-stack">
+        <PageHeader title="Quizzes" subtitle="Practice questions generated from your notes." />
+
+        <section className="split-layout">
+          <aside className="panel">
+            <div className="section-heading">
+              <h2>Create Quiz</h2>
+              <p>Pick a topic and difficulty level.</p>
+            </div>
+            <form className="form-grid compact-form" onSubmit={handleGenerateQuiz}>
+              <label>
+                Focus topic
+                <input onChange={(event) => setQuizTopic(event.target.value)} placeholder="Leave blank for all notes" value={quizTopic} />
+              </label>
+              <div className="form-row">
+                <label>
+                  Questions
+                  <input max={20} min={1} onChange={(event) => setQuizCount(Number(event.target.value))} type="number" value={quizCount} />
+                </label>
+                <label>
+                  Level
+                  <select onChange={(event) => setQuizDifficulty(event.target.value as Difficulty)} value={quizDifficulty}>
+                    <option value="easy">Easy</option>
+                    <option value="medium">Medium</option>
+                    <option value="hard">Hard</option>
+                  </select>
+                </label>
+              </div>
+              <button className="primary-button" disabled={busyKey === "quiz-generate"} type="submit">
+                <Icon name="quiz" />
+                {busyKey === "quiz-generate" ? "Preparing..." : "Create Quiz"}
+              </button>
+            </form>
+            <p className="helper-text">{quizMessage}</p>
+          </aside>
+
+          <article className="panel quiz-panel">
+            {currentQuizQuestion ? (
+              <>
+                <div className="quiz-header">
+                  <div>
+                    <span className="small-label">Quiz: {currentQuizQuestion.topic_name}</span>
+                    <h2>Question {activeQuizIndex + 1} of {quizQuestions.length}</h2>
+                  </div>
+                  {quizResult ? (
+                    <div className="score-pill">
+                      {quizResult.score_percent}% score
+                    </div>
+                  ) : null}
+                </div>
+                <ProgressBar value={quizProgress} />
+                <div className="question-card">
+                  <h3>{currentQuizQuestion.prompt}</h3>
+                  {currentQuizQuestion.options.length ? (
+                    <div className="options-grid">
+                      {currentQuizQuestion.options.map((option) => {
+                        const selected = quizAnswers[activeQuizIndex] === option.id;
+                        const correct = currentQuizResult
+                          ? option.id === currentQuizResult.correct_answer || option.label === currentQuizResult.correct_answer
+                          : false;
+                        const incorrect = currentQuizResult && selected && !correct;
+                        const stateClass = correct ? "correct" : incorrect ? "incorrect" : selected ? "selected" : "";
+                        return (
+                          <label className={`option-card ${stateClass}`} key={option.id}>
+                            <input
+                              checked={selected}
+                              disabled={Boolean(quizResult)}
+                              name={`quiz-${activeQuizIndex}`}
+                              onChange={() => setQuizAnswers((current) => ({ ...current, [activeQuizIndex]: option.id }))}
+                              type="radio"
+                            />
+                            <span>{option.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <textarea
+                      className="quiz-textarea"
+                      disabled={Boolean(quizResult)}
+                      onChange={(event) => setQuizAnswers((current) => ({ ...current, [activeQuizIndex]: event.target.value }))}
+                      placeholder="Type your answer here..."
+                      rows={4}
+                      value={quizAnswers[activeQuizIndex] ?? ""}
+                    />
+                  )}
+                  {currentQuizResult ? (
+                    <div className={currentQuizResult.is_correct ? "explanation correct" : "explanation incorrect"}>
+                      <strong>{currentQuizResult.is_correct ? "Correct" : "Review this"}</strong>
+                      <p>{currentQuizResult.feedback}</p>
+                      <small>Answer: {currentQuizResult.correct_answer}</small>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="footer-actions">
+                  <button
+                    className="secondary-button"
+                    disabled={activeQuizIndex === 0}
+                    onClick={() => setActiveQuizIndex((value) => Math.max(0, value - 1))}
+                    type="button"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={activeQuizIndex >= quizQuestions.length - 1}
+                    onClick={() => setActiveQuizIndex((value) => Math.min(quizQuestions.length - 1, value + 1))}
+                    type="button"
+                  >
+                    Next
+                  </button>
+                  <button className="primary-button" disabled={busyKey === "quiz-submit" || Boolean(quizResult)} onClick={handleSubmitQuiz} type="button">
+                    Finish Quiz
+                  </button>
+                </div>
+              </>
+            ) : (
+              <EmptyState
+                icon="quiz"
+                title="No quizzes yet"
+                description="Create a quiz from your notes to test yourself."
+              />
+            )}
+          </article>
+        </section>
+      </section>
+    );
+  }
+
+  function renderProgress() {
+    const topicRows = progress?.topic_mastery.length
+      ? progress.topic_mastery.slice(0, 6).map((topic) => ({
+          topic_name: topic.topic_name,
+          course: "Uploaded materials",
+          mastery_score: topic.mastery_score,
+          state: topic.mastery_score < 60 ? "Needs Review" : "Improving",
+        }))
+      : sampleWeakTopics;
+    const recommendation = dashboard?.recommendations[0];
+
+    return (
+      <section className="page-stack">
+        <PageHeader title="Progress" subtitle="See what you are improving and what needs review." />
+
+        <div className="stats-grid three">
+          <StatCard label="Overall Accuracy" value={progress ? `${Math.round(progress.quiz_accuracy)}%` : "78%"} icon="quiz" />
+          <StatCard label="Materials Studied" value={String(documents.length || 12)} icon="file" />
+          <StatCard label="Quizzes Completed" value={quizResult ? "1 this session" : "8"} icon="trend" />
+        </div>
+
+        <section className="progress-layout">
+          <article className="panel">
+            <div className="section-heading">
+              <h2>Weak Topics</h2>
+              <p>Use these topics to decide what to study next.</p>
+            </div>
+            <div className="topic-list">
+              {topicRows.map((topic) => (
+                <article className="topic-row" key={`${topic.topic_name}-${topic.course}`}>
+                  <div>
+                    <strong>{topic.topic_name}</strong>
+                    <p>
+                      {topic.course} / {topic.state}
+                    </p>
+                  </div>
+                  <div className="topic-score">
+                    <span>{Math.round(topic.mastery_score)}%</span>
+                    <ProgressBar value={topic.mastery_score} tone={topic.mastery_score < 60 ? "orange" : "green"} />
+                  </div>
+                </article>
+              ))}
+            </div>
+          </article>
+
+          <article className="recommendation-card vertical">
+            <div className="recommendation-icon">
+              <Icon name="spark" />
+            </div>
+            <span className="small-label">Recommended Focus</span>
+            <p>
+              {recommendation
+                ? `${recommendation.action} Focus on ${recommendation.topic}.`
+                : "Practice Integrals today. You missed the most questions from this topic."}
+            </p>
+            <button
+              className="primary-button"
+              onClick={() => {
+                setQuizTopic(recommendation?.topic ?? "Integrals");
+                setActiveView("quizzes");
+              }}
+              type="button"
+            >
+              Start Quiz
+            </button>
+          </article>
+        </section>
+      </section>
+    );
+  }
+
+  function renderSettings() {
+    return (
+      <section className="page-stack">
+        <PageHeader title="Settings" subtitle="Keep your profile and study preferences simple." />
+
+        <section className="settings-grid">
+          <article className="panel">
+            <div className="section-heading">
+              <h2>Profile</h2>
+              <p>Update your display name and default difficulty.</p>
+            </div>
+            <form className="form-grid" onSubmit={handleProfileUpdate}>
+              <label>
+                Name
+                <input minLength={2} onChange={(event) => setSettingsName(event.target.value)} value={settingsName} />
               </label>
               <label>
-                Level
-                <select onChange={(event) => setQuizDifficulty(event.target.value as Difficulty)} value={quizDifficulty}>
+                Study level
+                <select onChange={(event) => setSettingsDifficulty(event.target.value as Difficulty)} value={settingsDifficulty}>
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="hard">Hard</option>
                 </select>
               </label>
-            </div>
-            <button className="primary-button" disabled={busyKey === "quiz-generate"} type="submit">
-              <AppIcon name="quiz" />
-              {busyKey === "quiz-generate" ? "Preparing Quiz..." : "Start Quiz"}
-            </button>
-          </form>
-          <p className="helper-text">{quizMessage}</p>
-        </article>
-
-        <article className="panel">
-          <div className="panel-head">
-            <div>
-              <p className="eyebrow">Questions</p>
-              <h2>{quizQuestions.length ? "Knowledge Check" : "Ready to Start?"}</h2>
-            </div>
-            {quizQuestions.length ? (
-              <button className="primary-button" disabled={busyKey === "quiz-submit"} onClick={handleSubmitQuiz} type="button">
-                {busyKey === "quiz-submit" ? "Scoring..." : "Submit Answers"}
+              <button className="primary-button" disabled={busyKey === "settings"} type="submit">
+                Save Changes
               </button>
-            ) : null}
-          </div>
-          {quizQuestions.length ? (
-            <div className="stack-list">
-              {quizQuestions.map((item, index) => (
-                <article className="question-card premium-question" key={`${item.topic_name}-${index}`}>
-                  <div className="question-header">
-                    <span className="pill">{item.topic_name}</span>
-                    <span className="badge">{item.question_type}</span>
-                  </div>
-                  <h3 className="question-text">{index + 1}. {item.prompt}</h3>
-                  {item.options.length ? (
-                    <div className="options-grid">
-                      {item.options.map((option) => (
-                        <label className={quizAnswers[index] === option.id ? "option-card selected" : "option-card"} key={option.id}>
-                          <input
-                            checked={quizAnswers[index] === option.id}
-                            name={`quiz-${index}`}
-                            onChange={() => setQuizAnswers((current) => ({ ...current, [index]: option.id }))}
-                            type="radio"
-                          />
-                          <span className="option-label">{option.label}</span>
-                        </label>
-                      ))}
-                    </div>
-                  ) : (
-                    <textarea
-                      className="quiz-textarea"
-                      onChange={(event) => setQuizAnswers((current) => ({ ...current, [index]: event.target.value }))}
-                      placeholder="Type your answer here..."
-                      rows={3}
-                      value={quizAnswers[index] ?? ""}
-                    />
-                  )}
-                </article>
-              ))}
-              {quizResult ? (
-                <article className="result-card premium-result">
-                  <div className="result-score">
-                    <strong>{quizResult.score_percent}%</strong>
-                    <span>Your Score</span>
-                  </div>
-                  <p>
-                    You got {quizResult.correct_count} out of {quizResult.total_questions} questions correct.
-                  </p>
-                </article>
-              ) : null}
+            </form>
+            <p className="helper-text">{settingsMessage}</p>
+          </article>
+
+          <article className="panel settings-card">
+            <div className="section-heading">
+              <h2>Account</h2>
+              <p>{currentUser?.email}</p>
             </div>
-          ) : (
-            <article className="empty-card empty-card-tall">
-              <div className="icon-badge large">
-                <AppIcon name="quiz" />
-              </div>
-              <strong>No active quiz.</strong>
-              <p>Configure and start a quiz to test your mastery.</p>
-            </article>
-          )}
-        </article>
+            <button className="ghost-button danger" disabled={busyKey === "logout"} onClick={handleLogout} type="button">
+              <Icon name="logout" />
+              Sign Out
+            </button>
+          </article>
+
+          <article className="panel settings-card">
+            <div className="section-heading">
+              <h2>Study Preferences</h2>
+              <p>Default quiz and flashcard difficulty follows your profile setting.</p>
+            </div>
+            <div className="preference-row">
+              <span>Current level</span>
+              <strong>{settingsDifficulty}</strong>
+            </div>
+          </article>
+
+          <article className="panel settings-card">
+            <div className="section-heading">
+              <h2>Notifications</h2>
+              <p>Local UI preferences for reminders.</p>
+            </div>
+            <label className="toggle-row">
+              <input checked={emailReminders} onChange={(event) => setEmailReminders(event.target.checked)} type="checkbox" />
+              <span>Study reminders</span>
+            </label>
+            <label className="toggle-row">
+              <input checked={weeklySummary} onChange={(event) => setWeeklySummary(event.target.checked)} type="checkbox" />
+              <span>Weekly progress summary</span>
+            </label>
+          </article>
+        </section>
       </section>
     );
   }
 
   if (!sessionChecked) {
     return (
-      <div className="app-shell auth-shell">
-        <article className="auth-card">
-          <img alt="Prepmind.ai logo" className="logo-mark" src={logoMark} />
-          <h1>Loading...</h1>
+      <div className="auth-shell">
+        <article className="auth-card loading-card">
+          <img alt="PrepMind AI logo" className="auth-logo" src={logoMark} />
+          <h1>Loading PrepMind AI</h1>
           <p>{workspaceMessage}</p>
+          <div className="spinner" />
         </article>
       </div>
     );
@@ -1086,36 +1509,34 @@ function App() {
 
   if (!currentUser) {
     return (
-      <div className="app-shell auth-shell">
-        <div className="auth-layout">
-          <article className="auth-card intro-card">
-            <img alt="Prepmind.ai logo" className="logo-mark" src={logoMark} />
-            <p className="eyebrow">Prepmind.ai</p>
-            <h1>Simple study workspace.</h1>
-            <p>Upload notes, chat, generate flashcards, and create quizzes.</p>
-            <ul className="simple-list">
-              <li>Upload notes, PDF, TXT, and DOCX files</li>
-              <li>Ask about your notes or ask general questions</li>
-              <li>Create flashcards and quizzes</li>
-            </ul>
+      <div className="auth-shell">
+        <section className="auth-layout">
+          <article className="auth-intro">
+            <div className="brand-lockup">
+              <img alt="PrepMind AI logo" className="auth-logo" src={logoMark} />
+              <strong>PrepMind AI</strong>
+            </div>
+            <h1>Study smarter. Achieve more.</h1>
+            <p>Upload your notes and let PrepMind AI turn them into summaries, flashcards, quizzes, and answers.</p>
+            <div className="auth-feature-grid">
+              <span>Upload Materials</span>
+              <span>Ask AI Questions</span>
+              <span>Generate Flashcards</span>
+              <span>Take Quizzes</span>
+              <span>Track Progress</span>
+            </div>
           </article>
 
           <article className="auth-card">
-            <div className="panel-head">
-              <div>
-                <p className="eyebrow">Access</p>
-                <h2>{authMode === "register" ? "Create account" : "Sign in"}</h2>
-              </div>
-              <button className="ghost-button" onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))} type="button">
-                <AppIcon name="moon" />
-                {theme === "light" ? "Dark" : "Light"}
-              </button>
+            <div className="auth-card-header">
+              <span className="small-label">Account</span>
+              <h2>{authMode === "register" ? "Create account" : "Sign in"}</h2>
             </div>
-            <div className="tab-row auth-tabs">
-              <button className={authMode === "login" ? "tab-button active" : "tab-button"} onClick={() => setAuthMode("login")} type="button">
+            <div className="auth-tabs">
+              <button className={authMode === "login" ? "filter-tab active" : "filter-tab"} onClick={() => setAuthMode("login")} type="button">
                 Login
               </button>
-              <button className={authMode === "register" ? "tab-button active" : "tab-button"} onClick={() => setAuthMode("register")} type="button">
+              <button className={authMode === "register" ? "filter-tab active" : "filter-tab"} onClick={() => setAuthMode("register")} type="button">
                 Register
               </button>
             </div>
@@ -1140,56 +1561,30 @@ function App() {
             </form>
             <p className="helper-text">{authMessage}</p>
           </article>
-        </div>
+        </section>
       </div>
     );
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <div className="brand-row">
-          <img alt="Prepmind.ai logo" className="logo-mark" src={logoMark} />
-          <div>
-            <h1>Prepmind.ai</h1>
-            <p className="status-text">{status === "online" ? "Connected" : "Offline"}</p>
-          </div>
-        </div>
-        <div className="topbar-actions">
-          <button className="ghost-button" onClick={() => refreshWorkspace()} type="button">
-            <AppIcon name="refresh" />
-            Sync
-          </button>
-          <button className="ghost-button" onClick={() => setTheme((value) => (value === "light" ? "dark" : "light"))} type="button">
-            <AppIcon name="moon" />
-            {theme === "light" ? "Dark" : "Light"}
-          </button>
-          <button className="ghost-button" disabled={busyKey === "logout"} onClick={handleLogout} type="button">
-            <AppIcon name="logout" />
-            Sign out
-          </button>
-        </div>
-      </header>
-
-      <nav className="main-tabs" aria-label="Main navigation">
-        {views.map((view) => (
-          <button className={activeView === view.key ? "tab-button active" : "tab-button"} key={view.key} onClick={() => setActiveView(view.key)} type="button">
-            <AppIcon name={view.icon} />
-            {view.label}
-          </button>
-        ))}
-      </nav>
-
-      <main className="view-container">
-        {activeView === "upload" ? renderUpload() : null}
-        {activeView === "flashcards" ? renderFlashcards() : null}
-        {activeView === "quiz" ? renderQuiz() : null}
-      </main>
-
-      {renderChatDock()}
-    </div>
+    <Layout
+      activeView={activeView}
+      onViewChange={setActiveView}
+      views={views}
+      onRefresh={() => refreshWorkspace()}
+      onLogout={handleLogout}
+      currentUser={currentUser}
+      status={status}
+    >
+      {activeView === "dashboard" ? renderDashboard() : null}
+      {activeView === "materials" ? renderMaterials() : null}
+      {activeView === "chat" ? renderChat() : null}
+      {activeView === "flashcards" ? renderFlashcards() : null}
+      {activeView === "quizzes" ? renderQuizzes() : null}
+      {activeView === "progress" ? renderProgress() : null}
+      {activeView === "settings" ? renderSettings() : null}
+    </Layout>
   );
 }
 
 export default App;
-

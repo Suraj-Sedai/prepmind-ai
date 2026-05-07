@@ -8,12 +8,12 @@ PrepMind AI is a local-first study app with a deliberately simple core flow:
 - generate flashcards from uploaded material
 - generate quizzes from uploaded material
 
-The current UI keeps chat available globally at the bottom of the app, so users can ask questions from any section without leaving their current workflow.
+The current UI is a simple MVP study workspace with these sections: Dashboard, Materials, AI Chat, Flashcards, Quizzes, Progress, and Settings.
 
 ## Project Layout
 
 - `backend/`: FastAPI app, SQLite persistence, document processing, retrieval, and study services
-- `frontend/`: React + TypeScript client for auth, uploads, flashcards, quizzes, and the global chat dock
+- `frontend/`: React + TypeScript client for auth, uploads, AI chat, flashcards, quizzes, progress, and settings
 
 ## Active API Surface
 
@@ -49,8 +49,9 @@ Current behavior:
 - document text is extracted, cleaned, chunked, and topic-labeled
 - chunk embeddings are stored with each uploaded document
 - retrieval uses vector similarity plus token overlap
-- answers are grounded in uploaded notes when relevant citations are found
-- if no relevant notes are found, chat falls back to general-answer mode
+- answers use the master RAG prompt in `prompt/rag1.md`
+- answers are closed-domain and grounded in uploaded notes when relevant citations are found
+- if no relevant notes are found, chat asks whether the student wants a general explanation instead of guessing
 
 If an OpenAI API key is configured, the backend can use OpenAI embeddings and model-backed answers. Without that key, it falls back to local embeddings and local synthesis.
 
@@ -88,9 +89,9 @@ The Vite dev server proxies `/api` requests to `http://127.0.0.1:8000`.
 
 The best next improvements are:
 
-- split the large frontend app shell into smaller components
-- add persistent multi-turn chat history instead of only the latest exchange
-- optionally remove backend endpoints that are no longer part of the simplified visible product
+- split the remaining large `App.tsx` page logic into focused screen components
+- add persistent multi-turn chat history instead of session-only chat exchanges
+- add richer import support if PPT or image processing becomes a product requirement
 
 ## Google Cloud Deployment
 

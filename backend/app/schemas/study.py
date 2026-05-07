@@ -8,6 +8,9 @@ class CitationItem(BaseModel):
     document_name: str
     topic_label: str
     snippet: str
+    page_start: int | None = None
+    page_end: int | None = None
+    relevance: float | None = None
 
 
 class AskRequest(BaseModel):

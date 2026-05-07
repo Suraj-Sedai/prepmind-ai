@@ -40,6 +40,10 @@ def ensure_runtime_schema(engine: Engine) -> None:
             statements.append("ALTER TABLE document_chunks ADD COLUMN embedding_model VARCHAR(120) NOT NULL DEFAULT 'local-hash-v1'")
         if "embedding_norm" not in chunk_columns:
             statements.append("ALTER TABLE document_chunks ADD COLUMN embedding_norm VARCHAR(32)")
+        if "page_start" not in chunk_columns:
+            statements.append("ALTER TABLE document_chunks ADD COLUMN page_start INTEGER")
+        if "page_end" not in chunk_columns:
+            statements.append("ALTER TABLE document_chunks ADD COLUMN page_end INTEGER")
 
     if not statements:
         return

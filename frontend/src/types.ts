@@ -89,6 +89,9 @@ export interface CitationItem {
   document_name: string;
   topic_label: string;
   snippet: string;
+  page_start?: number | null;
+  page_end?: number | null;
+  relevance?: number | null;
 }
 
 export interface AskResponse {

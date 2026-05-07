@@ -145,17 +145,20 @@ async def upload_document(
         document.extracted_word_count = processed.word_count
         document.topic_summary = ", ".join(processed.topics[:5])
         document.error_message = None
-        chunk_vectors, embedding_model = embed_texts(processed.chunks, task_type="RETRIEVAL_DOCUMENT")
+        chunk_texts = [chunk.text for chunk in processed.chunks]
+        chunk_vectors, embedding_model = embed_texts(chunk_texts, task_type="RETRIEVAL_DOCUMENT")
 
         for index, chunk in enumerate(processed.chunks):
-            topic = choose_chunk_topic(chunk, processed.topics)
+            topic = chunk.topic_label or choose_chunk_topic(chunk.text, processed.topics)
             db.add(
                 DocumentChunk(
                     document_id=document.id,
                     chunk_index=index,
-                    chunk_text=chunk,
+                    chunk_text=chunk.text,
                     topic_label=topic,
-                    chunk_word_count=len(chunk.split()),
+                    page_start=chunk.page_start,
+                    page_end=chunk.page_end,
+                    chunk_word_count=len(chunk.text.split()),
                     embedding_vector=serialize_vector(chunk_vectors[index]) if index < len(chunk_vectors) else None,
                     embedding_model=embedding_model,
                     embedding_norm="l2",

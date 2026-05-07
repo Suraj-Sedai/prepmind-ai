@@ -35,6 +35,8 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer)
     chunk_text: Mapped[str] = mapped_column(Text)
     topic_label: Mapped[str] = mapped_column(String(120), default="General")
+    page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
     chunk_word_count: Mapped[int] = mapped_column(Integer, default=0)
     embedding_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[str] = mapped_column(String(120), default="local-hash-v1")

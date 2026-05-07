@@ -71,6 +71,10 @@ STOPWORDS = {
 QUESTION_TYPES = ["multiple_choice", "true_false", "fill_blank", "short_answer"]
 settings = get_settings()
 serializer = URLSafeSerializer(settings.session_secret, salt="prepmind-study")
+MISSING_INFORMATION_TEMPLATE = (
+    "I'm sorry, but based on your currently uploaded materials, I don't have information on {topic}. "
+    "Would you like me to provide a general explanation instead?"
+)
 
 
 def _tokens(text: str) -> list[str]:
@@ -86,6 +90,13 @@ def _sentence_split(text: str) -> list[str]:
     return [sentence.strip() for sentence in sentences if len(sentence.strip().split()) >= 7]
 
 
+def _truncate_text(text: str, max_chars: int = 320) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= max_chars:
+        return compact
+    return compact[: max_chars - 3].rstrip() + "..."
+
+
 def _idf_scores(chunks: list[DocumentChunk]) -> dict[str, float]:
     if not chunks:
         return {}
@@ -99,6 +110,135 @@ def _idf_scores(chunks: list[DocumentChunk]) -> dict[str, float]:
         token: math.log((1 + total) / (1 + freq)) + 1.0
         for token, freq in doc_freq.items()
     }
+
+
+def _best_snippet(text: str, question_tokens: Counter[str], max_chars: int = 280) -> str:
+    candidates = _sentence_split(text)
+    if not candidates:
+        return _truncate_text(text, max_chars=max_chars)
+
+    def sentence_score(sentence: str) -> tuple[float, int]:
+        sentence_tokens = Counter(_tokens(sentence))
+        overlap = set(question_tokens).intersection(sentence_tokens)
+        weighted = sum(min(question_tokens[token], sentence_tokens[token]) for token in overlap)
+        return weighted, len(sentence.split())
+
+    best_sentence = max(candidates, key=sentence_score)
+    return _truncate_text(best_sentence, max_chars=max_chars)
+
+
+def _jaccard_similarity(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    union = left.union(right)
+    if not union:
+        return 0.0
+    return len(left.intersection(right)) / len(union)
+
+
+def _select_diverse_chunks(
+    scored: list[tuple[float, int, float, DocumentChunk]],
+    limit: int,
+) -> list[DocumentChunk]:
+    selected: list[DocumentChunk] = []
+    selected_signatures: list[set[str]] = []
+    topic_counts: Counter[tuple[int, str]] = Counter()
+
+    for score, overlap_count, vector_score, chunk in scored:
+        if not (score >= 0.12 or overlap_count >= 2 or (overlap_count >= 1 and vector_score >= 0.25)):
+            continue
+
+        signature = _token_set(chunk.chunk_text)
+        if selected_signatures and max(_jaccard_similarity(signature, existing) for existing in selected_signatures) >= 0.8:
+            continue
+
+        topic_key = (chunk.document_id, chunk.topic_label.lower())
+        if topic_counts[topic_key] >= 2:
+            continue
+
+        selected.append(chunk)
+        selected_signatures.append(signature)
+        topic_counts[topic_key] += 1
+
+        if len(selected) >= limit:
+            break
+
+    return selected
+
+
+def _is_broad_review_question(question: str) -> bool:
+    lowered = question.lower()
+    review_terms = {"summarize", "summary", "overview", "outline", "review", "main idea", "key points"}
+    return any(term in lowered for term in review_terms)
+
+
+def _requests_general_explanation(question: str) -> bool:
+    lowered = question.lower()
+    return "general explanation" in lowered or "general answer" in lowered or "use general knowledge" in lowered
+
+
+def _missing_information_answer(question: str) -> str:
+    topic = question.strip().rstrip("?.!")
+    topic = re.sub(
+        r"^(what|who|when|where|why|how)\s+(is|are|was|were|does|do|did|can|could|should)\s+",
+        "",
+        topic,
+        flags=re.IGNORECASE,
+    )
+    if len(topic) > 90:
+        topic = topic[:87].rstrip() + "..."
+    return MISSING_INFORMATION_TEMPLATE.format(topic=topic or "that topic")
+
+
+def _format_page_range(chunk: DocumentChunk) -> str:
+    if chunk.page_start is None:
+        return "Page: unknown"
+    if chunk.page_end is None or chunk.page_end == chunk.page_start:
+        return f"Page: {chunk.page_start}"
+    return f"Pages: {chunk.page_start}-{chunk.page_end}"
+
+
+def _build_rag_context_blocks(chunks: list[DocumentChunk], max_words_per_block: int = 220) -> list[str]:
+    context_blocks: list[str] = []
+    seen_windows: set[tuple[int, int, int]] = set()
+
+    for chunk in chunks:
+        document_chunks = sorted(chunk.document.chunks, key=lambda item: item.chunk_index)
+        by_index = {item.chunk_index: item for item in document_chunks}
+        start_index = max(0, chunk.chunk_index - 1)
+        end_index = min(document_chunks[-1].chunk_index if document_chunks else chunk.chunk_index, chunk.chunk_index + 1)
+        window_key = (chunk.document_id, start_index, end_index)
+        if window_key in seen_windows:
+            continue
+        seen_windows.add(window_key)
+
+        window_parts: list[str] = []
+        for index in range(start_index, end_index + 1):
+            sibling = by_index.get(index)
+            if sibling is None:
+                continue
+            window_parts.append(sibling.chunk_text.strip())
+
+        window_text = " ".join(part for part in window_parts if part).strip()
+        if not window_text:
+            continue
+
+        words = window_text.split()
+        if len(words) > max_words_per_block:
+            window_text = " ".join(words[:max_words_per_block]).strip() + "..."
+
+        context_blocks.append(
+            "\n".join(
+                [
+                    f"Source: {chunk.document.document_name}",
+                    f"Topic: {chunk.topic_label}",
+                    _format_page_range(chunk),
+                    f"Context window: {window_text}",
+                ]
+            )
+        )
+
+    return context_blocks
 
 
 def retrieve_relevant_chunks(
@@ -141,19 +281,19 @@ def retrieve_relevant_chunks(
             if topic.lower() in chunk.chunk_text.lower():
                 topic_bonus += 0.25
         score = vector_score * 0.7 + (lexical / math.sqrt(max(chunk.chunk_word_count, 1))) * 0.3 + topic_bonus
+        setattr(chunk, "_rag_score", score)
         scored.append((score, overlap_count, vector_score, chunk))
 
     scored.sort(key=lambda item: (item[0], item[3].chunk_word_count), reverse=True)
 
-    relevant_chunks = [
-        chunk
-        for score, overlap_count, vector_score, chunk in scored
-        if score >= 0.18 or overlap_count >= 2 or (overlap_count >= 1 and vector_score >= 0.45)
-    ]
+    relevant_chunks = _select_diverse_chunks(scored, limit=limit)
     if relevant_chunks:
         return relevant_chunks[:limit]
 
-    return []
+    if _is_broad_review_question(question):
+        return [item[3] for item in scored[:limit]]
+
+    return [item[3] for item in scored[:limit] if item[0] > 0.05 or item[1] > 0]
 
 
 def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, study_bump: int = 1) -> None:
@@ -182,33 +322,40 @@ def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, st
 def answer_question(db: Session, user_id: int, question: str) -> AskResponse:
     chunks = retrieve_relevant_chunks(db, user_id=user_id, question=question)
     if not chunks:
-        general_answer = generate_general_answer(question)
+        if _requests_general_explanation(question):
+            general_answer = generate_general_answer(question)
+            return AskResponse(
+                answer=(
+                    general_answer
+                    or "General explanation mode is limited without an AI API key."
+                ),
+                citations=[],
+                confidence=0.2 if general_answer else 0.0,
+            )
+
         return AskResponse(
-            answer=(
-                general_answer
-                or "I can answer general questions, but general mode is limited without an AI API key. "
-                "You can still upload notes, PDF, TXT, or DOCX files and I will answer from that material."
-            ),
+            answer=_missing_information_answer(question),
             citations=[],
-            confidence=0.2 if general_answer else 0.0,
+            confidence=0.0,
         )
 
     question_tokens = Counter(_tokens(question))
     citations: list[CitationItem] = []
-    synthesis_lines: list[str] = []
     overlap_total = 0.0
 
     for chunk in chunks:
         chunk_tokens = Counter(_tokens(chunk.chunk_text))
         overlap = set(question_tokens).intersection(chunk_tokens)
         overlap_total += sum(question_tokens[token] for token in overlap)
-        snippet = chunk.chunk_text[:280].strip()
-        synthesis_lines.append(f"{chunk.topic_label}: {snippet}")
+        snippet = _best_snippet(chunk.chunk_text, question_tokens, max_chars=280)
         citations.append(
             CitationItem(
                 document_name=chunk.document.document_name,
                 topic_label=chunk.topic_label,
                 snippet=snippet,
+                page_start=chunk.page_start,
+                page_end=chunk.page_end,
+                relevance=round(float(getattr(chunk, "_rag_score", 0.0)), 3),
             )
         )
         _upsert_mastery(db, user_id, chunk.topic_label, delta=2.0)
@@ -216,11 +363,16 @@ def answer_question(db: Session, user_id: int, question: str) -> AskResponse:
     db.commit()
 
     confidence = min(0.97, 0.45 + overlap_total * 0.06)
-    answer = generate_grounded_answer(question, citations)
+    context_blocks = _build_rag_context_blocks(chunks)
+    answer = generate_grounded_answer(question, citations, context_blocks)
     if answer is None:
         answer = (
-            "Here is a grounded answer based on your uploaded material:\n\n- "
-            + "\n- ".join(synthesis_lines)
+            "Here is a grounded answer based on your uploaded material:\n\n"
+            + "\n\n".join(
+                f"{citation.topic_label}\n- {citation.snippet} ({citation.document_name}, "
+                f"{'p. ' + str(citation.page_start) if citation.page_start else 'page unknown'})"
+                for citation in citations
+            )
             + "\n\nUse the citations to review the exact source language, then follow with flashcards or a quiz on the same topic."
         )
     return AskResponse(answer=answer, citations=citations, confidence=round(confidence, 2))
