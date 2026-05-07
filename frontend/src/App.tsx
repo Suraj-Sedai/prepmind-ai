@@ -16,6 +16,7 @@ import {
   logoutUser,
   rateFlashcard,
   registerUser,
+  startGoogleLogin,
   submitQuiz,
   updateProfile,
   uploadDocument,
@@ -125,6 +126,22 @@ function normalizeDifficulty(value: string): Difficulty {
 
 function isSupportedUploadFile(file: File) {
   return supportedUploadExtensions.some((extension) => file.name.toLowerCase().endsWith(extension));
+}
+
+function consumeOAuthResult() {
+  const params = new URLSearchParams(window.location.search);
+  const authError = params.get("auth_error");
+  const auth = params.get("auth");
+  if (!authError && !auth) {
+    return { authError: null, auth: null };
+  }
+
+  params.delete("auth_error");
+  params.delete("auth");
+  const query = params.toString();
+  const cleanUrl = `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`;
+  window.history.replaceState({}, document.title, cleanUrl);
+  return { authError, auth };
 }
 
 function materialStatusLabel(status: string) {
@@ -411,6 +428,7 @@ function App() {
     let cancelled = false;
 
     async function initialize() {
+      const oauthResult = consumeOAuthResult();
       try {
         await fetchStatus();
         if (cancelled) return;
@@ -423,6 +441,9 @@ function App() {
           syncUserState(null);
           clearWorkspace();
           setWorkspaceMessage("Backend online. Sign in to get started.");
+          if (oauthResult.authError) {
+            setAuthMessage(`Google sign-in failed: ${oauthResult.authError}`);
+          }
           setSessionChecked(true);
           return;
         }
@@ -431,6 +452,9 @@ function App() {
         const snapshot = await loadWorkspaceSnapshot();
         if (cancelled) return;
         applyWorkspaceSnapshot(snapshot);
+        if (oauthResult.auth === "google") {
+          setAuthMessage("Google sign-in successful.");
+        }
         setWorkspaceMessage("Workspace ready.");
         setSessionChecked(true);
       } catch (error) {
@@ -1595,6 +1619,13 @@ function App() {
               <button className={authMode === "register" ? "filter-tab active" : "filter-tab"} onClick={() => setAuthMode("register")} type="button">
                 Register
               </button>
+            </div>
+            <button className="google-button" disabled={status === "offline"} onClick={startGoogleLogin} type="button">
+              <span className="google-mark">G</span>
+              Continue with Google
+            </button>
+            <div className="auth-divider">
+              <span>or</span>
             </div>
             <form className="form-grid" onSubmit={handleAuthSubmit}>
               {authMode === "register" ? (

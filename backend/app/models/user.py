@@ -13,6 +13,8 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(120))
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     password_hash: Mapped[str] = mapped_column(String(255))
+    auth_provider: Mapped[str] = mapped_column(String(32), default="password")
+    google_sub: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
     preferred_difficulty: Mapped[str] = mapped_column(String(32), default="medium")
     profile_image_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

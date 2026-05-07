@@ -85,6 +85,10 @@ export function logoutUser() {
   });
 }
 
+export function startGoogleLogin() {
+  window.location.assign("/api/auth/google/start");
+}
+
 export function uploadProfileImage(file: File) {
   const formData = new FormData();
   formData.append("file", file);

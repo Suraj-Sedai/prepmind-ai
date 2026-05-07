@@ -48,6 +48,21 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("PREPMIND_ALLOW_GENERAL_AI_FALLBACK", "ALLOW_GENERAL_AI_FALLBACK"),
     )
+    google_client_id: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PREPMIND_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"),
+    )
+    google_client_secret: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PREPMIND_GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"),
+    )
+    google_redirect_uri: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("PREPMIND_GOOGLE_REDIRECT_URI", "GOOGLE_REDIRECT_URI"),
+    )
+    google_oauth_authorize_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    google_oauth_token_url: str = "https://oauth2.googleapis.com/token"
+    google_oauth_userinfo_url: str = "https://openidconnect.googleapis.com/v1/userinfo"
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -21,6 +21,8 @@ Auth:
 
 - `POST /api/auth/register`
 - `POST /api/auth/login`
+- `GET /api/auth/google/start`
+- `GET /api/auth/google/callback`
 - `POST /api/auth/logout`
 - `GET /api/auth/session`
 - `GET /api/auth/me`
@@ -87,6 +89,31 @@ npm run dev
 Open `http://localhost:5173`.
 
 The Vite dev server proxies `/api` requests to `http://127.0.0.1:8000`.
+
+## Google Sign-In
+
+Google sign-in uses the same FastAPI session cookie as email/password login.
+
+Create a Google OAuth client of type `Web application`, then add these authorized redirect URIs:
+
+- Local: `http://127.0.0.1:8000/api/auth/google/callback`
+- Cloud Run: `https://YOUR_CLOUD_RUN_URL/api/auth/google/callback`
+
+Backend environment variables:
+
+```env
+PREPMIND_GOOGLE_CLIENT_ID=
+PREPMIND_GOOGLE_CLIENT_SECRET=
+PREPMIND_GOOGLE_REDIRECT_URI=https://YOUR_CLOUD_RUN_URL/api/auth/google/callback
+PREPMIND_FRONTEND_ORIGIN=https://YOUR_CLOUD_RUN_URL
+```
+
+For local development, use matching hosts so the session cookie is sent back correctly:
+
+```env
+PREPMIND_GOOGLE_REDIRECT_URI=http://127.0.0.1:8000/api/auth/google/callback
+PREPMIND_FRONTEND_ORIGIN=http://127.0.0.1:5173
+```
 
 ## Current Priorities
 

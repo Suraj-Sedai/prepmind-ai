@@ -13,6 +13,11 @@ def ensure_runtime_schema(engine: Engine) -> None:
     user_columns = {column["name"] for column in inspector.get_columns("users")}
     if "profile_image_path" not in user_columns:
         statements.append("ALTER TABLE users ADD COLUMN profile_image_path VARCHAR(255)")
+    if "auth_provider" not in user_columns:
+        statements.append("ALTER TABLE users ADD COLUMN auth_provider VARCHAR(32) NOT NULL DEFAULT 'password'")
+    if "google_sub" not in user_columns:
+        statements.append("ALTER TABLE users ADD COLUMN google_sub VARCHAR(255)")
+        statements.append("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_google_sub ON users (google_sub) WHERE google_sub IS NOT NULL")
 
     if "documents" not in table_names:
         if statements:

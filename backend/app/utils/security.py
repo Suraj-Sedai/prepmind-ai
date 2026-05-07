@@ -10,6 +10,8 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
+    if "$" not in password_hash:
+        return False
     salt, digest = password_hash.split("$", maxsplit=1)
     candidate = pbkdf2_hmac("sha256", password.encode("utf-8"), salt.encode("utf-8"), 200_000).hex()
     return compare_digest(candidate, digest)
