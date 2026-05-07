@@ -37,7 +37,7 @@ import type { ViewKey } from "./components/layout/Sidebar";
 
 type AuthMode = "login" | "register";
 type Difficulty = "easy" | "medium" | "hard";
-type MaterialFilter = "all" | "pdf" | "docx" | "txt";
+type MaterialFilter = "all" | "pdf" | "docx" | "txt" | "md";
 type WorkspaceSnapshot = {
   documents: DocumentItem[];
   flashcards: FlashcardItem[];
@@ -47,6 +47,9 @@ type WorkspaceSnapshot = {
 type ChatExchange = {
   question: string;
   answer: string;
+  answerStatus: AskResponse["answer_status"];
+  confidenceLabel: AskResponse["confidence_label"];
+  usedGeneralAi: boolean;
   citations: AskResponse["citations"];
 };
 
@@ -65,6 +68,7 @@ const materialFilters: Array<{ key: MaterialFilter; label: string }> = [
   { key: "pdf", label: "PDF" },
   { key: "docx", label: "Docs" },
   { key: "txt", label: "Text" },
+  { key: "md", label: "MD" },
 ];
 
 const sampleStudyCards = [
@@ -87,7 +91,7 @@ const sampleWeakTopics = [
 ];
 
 const chatSuggestions = ["Summarize", "Explain Simply", "Make Flashcards", "Create Quiz"] as const;
-const supportedUploadExtensions = [".pdf", ".docx", ".txt"];
+const supportedUploadExtensions = [".pdf", ".docx", ".txt", ".md"];
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -121,6 +125,34 @@ function normalizeDifficulty(value: string): Difficulty {
 
 function isSupportedUploadFile(file: File) {
   return supportedUploadExtensions.some((extension) => file.name.toLowerCase().endsWith(extension));
+}
+
+function materialStatusLabel(status: string) {
+  if (status === "ready" || status === "processed") return "Ready to study";
+  if (status === "processing") return "Processing...";
+  if (status === "failed") return "Failed to process";
+  if (status === "uploaded") return "Uploaded";
+  return status;
+}
+
+function answerStatusLabel(status: AskResponse["answer_status"]) {
+  if (status === "answered_from_documents") return "Answer from uploaded materials";
+  if (status === "general_ai_fallback") return "General AI answer";
+  return "Not found in uploaded materials";
+}
+
+function answerStatusClass(status: AskResponse["answer_status"]) {
+  if (status === "answered_from_documents") return "document";
+  if (status === "general_ai_fallback") return "general";
+  return "missing";
+}
+
+function formatCitation(citation: AskResponse["citations"][number]) {
+  if (citation.document_name === "General AI knowledge") {
+    return "General AI knowledge - not from uploaded materials";
+  }
+  const location = citation.page_or_slide ?? (citation.page_start ? `Page ${citation.page_start}` : citation.topic_label);
+  return `${citation.document_name}${location ? ` - ${location}` : ""}`;
 }
 
 function renderInlineFormatting(text: string): ReactNode[] {
@@ -263,7 +295,7 @@ function App() {
   const [courseName, setCourseName] = useState("Biology");
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [materialFilter, setMaterialFilter] = useState<MaterialFilter>("all");
-  const [uploadMessage, setUploadMessage] = useState("PDF, DOCX, and TXT files are supported.");
+  const [uploadMessage, setUploadMessage] = useState("PDF, DOCX, TXT, and MD files are supported.");
   const [uploadDragging, setUploadDragging] = useState(false);
 
   const [question, setQuestion] = useState("");
@@ -480,7 +512,7 @@ function App() {
   async function handleUpload(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selectedFile) {
-      setUploadMessage("Choose a PDF, DOCX, or TXT file first.");
+      setUploadMessage("Choose a PDF, DOCX, TXT, or MD file first.");
       return;
     }
     setBusyKey("upload");
@@ -494,7 +526,7 @@ function App() {
       await refreshWorkspace("Refreshing after upload...");
     } catch (error) {
       console.error(error);
-      setUploadMessage(error instanceof Error ? error.message : "We could not process this file. Please upload a PDF, DOCX, or TXT file.");
+      setUploadMessage(error instanceof Error ? error.message : "We could not process this file. Please upload a PDF, DOCX, TXT, or MD file.");
     } finally {
       setBusyKey(null);
     }
@@ -507,7 +539,7 @@ function App() {
     }
     if (!isSupportedUploadFile(file)) {
       setSelectedFile(null);
-      setUploadMessage("We could not process this file. Please upload a PDF, DOCX, or TXT file.");
+      setUploadMessage("We could not process this file. Please upload a PDF, DOCX, TXT, or MD file.");
       return;
     }
     setSelectedFile(file);
@@ -544,12 +576,15 @@ function App() {
     setPendingQuestion(submittedQuestion);
     setBusyKey("ask");
     try {
-      const payload = await askQuestion(submittedQuestion);
+      const payload = await askQuestion(submittedQuestion, selectedDocumentId);
       setChatHistory((current) => [
         ...current,
         {
           question: submittedQuestion,
           answer: payload.answer,
+          answerStatus: payload.answer_status,
+          confidenceLabel: payload.confidence_label,
+          usedGeneralAi: payload.used_general_ai,
           citations: payload.citations,
         },
       ]);
@@ -564,6 +599,9 @@ function App() {
         {
           question: submittedQuestion,
           answer: message,
+          answerStatus: "not_found_in_documents",
+          confidenceLabel: "low",
+          usedGeneralAi: false,
           citations: [],
         },
       ]);
@@ -715,6 +753,7 @@ function App() {
   const currentQuizQuestion = quizQuestions[activeQuizIndex] ?? null;
   const currentQuizResult = quizResult?.results[activeQuizIndex] ?? null;
   const latestCitations = [...chatHistory].reverse().find((entry) => entry.citations.length)?.citations ?? [];
+  const latestStudyCitations = latestCitations.filter((citation) => citation.document_name !== "General AI knowledge");
   const filteredDocuments =
     materialFilter === "all"
       ? documents
@@ -847,8 +886,8 @@ function App() {
                 </span>
                 <strong>{selectedFile ? selectedFile.name : "Drag and drop your files here"}</strong>
                 <span>or click to upload</span>
-                <small>PDF, DOCX, and TXT supported</small>
-                <input accept=".pdf,.txt,.docx" onChange={(event) => handleSelectedUploadFile(event.target.files?.[0])} type="file" />
+                <small>PDF, DOCX, TXT, and MD supported</small>
+                <input accept=".pdf,.txt,.md,.docx" onChange={(event) => handleSelectedUploadFile(event.target.files?.[0])} type="file" />
               </label>
               <label className="checkbox-row">
                 <input checked={replaceExisting} onChange={(event) => setReplaceExisting(event.target.checked)} type="checkbox" />
@@ -895,13 +934,16 @@ function App() {
                           {document.course_name} / {document.document_type.toUpperCase()} / {formatDate(document.upload_date)}
                         </p>
                         <small>
-                          {document.processing_status} / {formatBytes(document.file_size_bytes)} / {document.chunk_count} chunks
+                          <span className={`status-pill ${document.processing_status}`}>{materialStatusLabel(document.processing_status)}</span>
+                          {formatBytes(document.file_size_bytes)} / {document.chunk_count} chunks
                         </small>
+                        {document.error_message ? <p className="file-error">{document.error_message}</p> : null}
                       </div>
                     </div>
                     <div className="file-actions">
                       <button
                         className="secondary-button"
+                        disabled={document.processing_status === "failed" || document.processing_status === "processing"}
                         onClick={() => {
                           setSelectedDocumentId(document.id);
                           setActiveView("chat");
@@ -925,7 +967,7 @@ function App() {
                 <EmptyState
                   icon="file"
                   title="No materials yet"
-                  description="Upload your first PDF, DOCX, or TXT file to start studying."
+                  description="Upload your first PDF, DOCX, TXT, or MD file to start studying."
                   action={
                     <button className="secondary-button" onClick={() => setMaterialFilter("all")} type="button">
                       Show All
@@ -941,9 +983,9 @@ function App() {
   }
 
   function renderChat() {
-    const contextSnippets = latestCitations.length
-      ? latestCitations.slice(0, 3).map((citation) => ({
-          title: citation.page_start ? `Page ${citation.page_start}` : citation.topic_label,
+    const contextSnippets = latestStudyCitations.length
+      ? latestStudyCitations.slice(0, 3).map((citation) => ({
+          title: citation.page_or_slide ?? (citation.page_start ? `Page ${citation.page_start}` : citation.topic_label),
           text: citation.snippet,
         }))
       : selectedDocument
@@ -1033,14 +1075,18 @@ function App() {
                       <Icon name="spark" />
                       <span>PrepMind AI</span>
                     </div>
+                    <div className={`answer-status ${answerStatusClass(entry.answerStatus)}`}>
+                      <strong>{answerStatusLabel(entry.answerStatus)}</strong>
+                      <span>{entry.usedGeneralAi ? "This answer is not from your uploaded materials." : `Confidence: ${entry.confidenceLabel}`}</span>
+                    </div>
                     <div className="assistant-content">{renderAnswerContent(entry.answer)}</div>
                     {entry.citations.length ? (
-                      <p className="sources-line">
-                        Sources:{" "}
-                        {entry.citations
-                          .map((citation) => citation.page_start ? `Page ${citation.page_start}` : citation.topic_label)
-                          .join(", ")}
-                      </p>
+                      <div className="sources-line">
+                        <strong>Sources</strong>
+                        {entry.citations.map((citation, citationIndex) => (
+                          <span key={`${citation.document_name}-${citationIndex}`}>{formatCitation(citation)}</span>
+                        ))}
+                      </div>
                     ) : null}
                   </article>
                 </div>
@@ -1155,6 +1201,12 @@ function App() {
                     <div className="answer-box">
                       <span className="small-label">Answer</span>
                       <p>{currentFlashcard.answer}</p>
+                      {currentFlashcard.source_document_name ? (
+                        <small className="source-footnote">
+                          Source: {currentFlashcard.source_document_name}
+                          {currentFlashcard.source_page_start ? ` - Page ${currentFlashcard.source_page_start}` : ""}
+                        </small>
+                      ) : null}
                     </div>
                   ) : (
                     <button className="primary-button" onClick={() => setShowFlashcardAnswer(true)} type="button">
@@ -1315,6 +1367,10 @@ function App() {
                       <small>Answer: {currentQuizResult.correct_answer}</small>
                     </div>
                   ) : null}
+                  <small className="source-footnote">
+                    Source: {currentQuizQuestion.source_document_name ?? "Uploaded material"}
+                    {currentQuizQuestion.source_page_start ? ` - Page ${currentQuizQuestion.source_page_start}` : ""}
+                  </small>
                 </div>
                 <div className="footer-actions">
                   <button

@@ -1,7 +1,7 @@
 import math
 import random
 import re
-from collections import Counter, defaultdict
+from collections import defaultdict
 from datetime import datetime
 from typing import Any
 
@@ -10,13 +10,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.models.document import Document, DocumentChunk
+from app.models.document import DocumentChunk
 from app.models.study import Flashcard, QuizAttempt, TopicMastery
-from app.services.embedding_service import cosine_similarity, deserialize_vector, embed_texts
-from app.services.llm_service import generate_general_answer, generate_grounded_answer
+from app.rag.answer import answer_question_with_rag
+from app.rag.retrieval import retrieve_relevant_chunks as retrieve_rag_chunks
 from app.schemas.study import (
     AskResponse,
-    CitationItem,
     ExamStartResponse,
     ExamSubmitResponse,
     FlashcardGenerateResponse,
@@ -71,229 +70,13 @@ STOPWORDS = {
 QUESTION_TYPES = ["multiple_choice", "true_false", "fill_blank", "short_answer"]
 settings = get_settings()
 serializer = URLSafeSerializer(settings.session_secret, salt="prepmind-study")
-MISSING_INFORMATION_TEMPLATE = (
-    "I'm sorry, but based on your currently uploaded materials, I don't have information on {topic}. "
-    "Would you like me to provide a general explanation instead?"
-)
-
-
 def _tokens(text: str) -> list[str]:
     return [token for token in re.findall(r"[A-Za-z]{3,}", text.lower()) if token not in STOPWORDS]
-
-
-def _token_set(text: str) -> set[str]:
-    return set(_tokens(text))
 
 
 def _sentence_split(text: str) -> list[str]:
     sentences = re.split(r"(?<=[.!?])\s+", text)
     return [sentence.strip() for sentence in sentences if len(sentence.strip().split()) >= 7]
-
-
-def _truncate_text(text: str, max_chars: int = 320) -> str:
-    compact = " ".join(text.split())
-    if len(compact) <= max_chars:
-        return compact
-    return compact[: max_chars - 3].rstrip() + "..."
-
-
-def _idf_scores(chunks: list[DocumentChunk]) -> dict[str, float]:
-    if not chunks:
-        return {}
-
-    doc_freq: Counter[str] = Counter()
-    total = len(chunks)
-    for chunk in chunks:
-        doc_freq.update(set(_tokens(chunk.chunk_text)))
-
-    return {
-        token: math.log((1 + total) / (1 + freq)) + 1.0
-        for token, freq in doc_freq.items()
-    }
-
-
-def _best_snippet(text: str, question_tokens: Counter[str], max_chars: int = 280) -> str:
-    candidates = _sentence_split(text)
-    if not candidates:
-        return _truncate_text(text, max_chars=max_chars)
-
-    def sentence_score(sentence: str) -> tuple[float, int]:
-        sentence_tokens = Counter(_tokens(sentence))
-        overlap = set(question_tokens).intersection(sentence_tokens)
-        weighted = sum(min(question_tokens[token], sentence_tokens[token]) for token in overlap)
-        return weighted, len(sentence.split())
-
-    best_sentence = max(candidates, key=sentence_score)
-    return _truncate_text(best_sentence, max_chars=max_chars)
-
-
-def _jaccard_similarity(left: set[str], right: set[str]) -> float:
-    if not left or not right:
-        return 0.0
-    union = left.union(right)
-    if not union:
-        return 0.0
-    return len(left.intersection(right)) / len(union)
-
-
-def _select_diverse_chunks(
-    scored: list[tuple[float, int, float, DocumentChunk]],
-    limit: int,
-) -> list[DocumentChunk]:
-    selected: list[DocumentChunk] = []
-    selected_signatures: list[set[str]] = []
-    topic_counts: Counter[tuple[int, str]] = Counter()
-
-    for score, overlap_count, vector_score, chunk in scored:
-        if not (score >= 0.12 or overlap_count >= 2 or (overlap_count >= 1 and vector_score >= 0.25)):
-            continue
-
-        signature = _token_set(chunk.chunk_text)
-        if selected_signatures and max(_jaccard_similarity(signature, existing) for existing in selected_signatures) >= 0.8:
-            continue
-
-        topic_key = (chunk.document_id, chunk.topic_label.lower())
-        if topic_counts[topic_key] >= 2:
-            continue
-
-        selected.append(chunk)
-        selected_signatures.append(signature)
-        topic_counts[topic_key] += 1
-
-        if len(selected) >= limit:
-            break
-
-    return selected
-
-
-def _is_broad_review_question(question: str) -> bool:
-    lowered = question.lower()
-    review_terms = {"summarize", "summary", "overview", "outline", "review", "main idea", "key points"}
-    return any(term in lowered for term in review_terms)
-
-
-def _requests_general_explanation(question: str) -> bool:
-    lowered = question.lower()
-    return "general explanation" in lowered or "general answer" in lowered or "use general knowledge" in lowered
-
-
-def _missing_information_answer(question: str) -> str:
-    topic = question.strip().rstrip("?.!")
-    topic = re.sub(
-        r"^(what|who|when|where|why|how)\s+(is|are|was|were|does|do|did|can|could|should)\s+",
-        "",
-        topic,
-        flags=re.IGNORECASE,
-    )
-    if len(topic) > 90:
-        topic = topic[:87].rstrip() + "..."
-    return MISSING_INFORMATION_TEMPLATE.format(topic=topic or "that topic")
-
-
-def _format_page_range(chunk: DocumentChunk) -> str:
-    if chunk.page_start is None:
-        return "Page: unknown"
-    if chunk.page_end is None or chunk.page_end == chunk.page_start:
-        return f"Page: {chunk.page_start}"
-    return f"Pages: {chunk.page_start}-{chunk.page_end}"
-
-
-def _build_rag_context_blocks(chunks: list[DocumentChunk], max_words_per_block: int = 220) -> list[str]:
-    context_blocks: list[str] = []
-    seen_windows: set[tuple[int, int, int]] = set()
-
-    for chunk in chunks:
-        document_chunks = sorted(chunk.document.chunks, key=lambda item: item.chunk_index)
-        by_index = {item.chunk_index: item for item in document_chunks}
-        start_index = max(0, chunk.chunk_index - 1)
-        end_index = min(document_chunks[-1].chunk_index if document_chunks else chunk.chunk_index, chunk.chunk_index + 1)
-        window_key = (chunk.document_id, start_index, end_index)
-        if window_key in seen_windows:
-            continue
-        seen_windows.add(window_key)
-
-        window_parts: list[str] = []
-        for index in range(start_index, end_index + 1):
-            sibling = by_index.get(index)
-            if sibling is None:
-                continue
-            window_parts.append(sibling.chunk_text.strip())
-
-        window_text = " ".join(part for part in window_parts if part).strip()
-        if not window_text:
-            continue
-
-        words = window_text.split()
-        if len(words) > max_words_per_block:
-            window_text = " ".join(words[:max_words_per_block]).strip() + "..."
-
-        context_blocks.append(
-            "\n".join(
-                [
-                    f"Source: {chunk.document.document_name}",
-                    f"Topic: {chunk.topic_label}",
-                    _format_page_range(chunk),
-                    f"Context window: {window_text}",
-                ]
-            )
-        )
-
-    return context_blocks
-
-
-def retrieve_relevant_chunks(
-    db: Session,
-    user_id: int,
-    question: str,
-    limit: int = 4,
-    topic: str | None = None,
-) -> list[DocumentChunk]:
-    base_query = (
-        select(DocumentChunk)
-        .join(Document, Document.id == DocumentChunk.document_id)
-        .where(Document.user_id == user_id)
-    )
-    query = base_query
-    if topic:
-        query = query.where(DocumentChunk.topic_label == topic)
-
-    chunks = db.scalars(query).all()
-    if topic and not chunks:
-        chunks = db.scalars(base_query).all()
-    if not chunks:
-        return []
-
-    question_tokens = Counter(_tokens(question))
-    question_vector, _ = embed_texts([question], task_type="RETRIEVAL_QUERY")
-    query_embedding = question_vector[0] if question_vector else []
-    idf = _idf_scores(chunks)
-    scored: list[tuple[float, int, float, DocumentChunk]] = []
-    for chunk in chunks:
-        chunk_tokens = Counter(_tokens(chunk.chunk_text))
-        overlap = set(question_tokens).intersection(chunk_tokens)
-        overlap_count = len(overlap)
-        lexical = sum(min(question_tokens[token], chunk_tokens[token]) * idf.get(token, 1.0) for token in overlap)
-        vector_score = cosine_similarity(query_embedding, deserialize_vector(chunk.embedding_vector))
-        topic_bonus = 0.0
-        if topic:
-            if chunk.topic_label.lower() == topic.lower():
-                topic_bonus += 0.4
-            if topic.lower() in chunk.chunk_text.lower():
-                topic_bonus += 0.25
-        score = vector_score * 0.7 + (lexical / math.sqrt(max(chunk.chunk_word_count, 1))) * 0.3 + topic_bonus
-        setattr(chunk, "_rag_score", score)
-        scored.append((score, overlap_count, vector_score, chunk))
-
-    scored.sort(key=lambda item: (item[0], item[3].chunk_word_count), reverse=True)
-
-    relevant_chunks = _select_diverse_chunks(scored, limit=limit)
-    if relevant_chunks:
-        return relevant_chunks[:limit]
-
-    if _is_broad_review_question(question):
-        return [item[3] for item in scored[:limit]]
-
-    return [item[3] for item in scored[:limit] if item[0] > 0.05 or item[1] > 0]
 
 
 def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, study_bump: int = 1) -> None:
@@ -319,63 +102,14 @@ def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, st
     mastery.last_reviewed = datetime.utcnow()
 
 
-def answer_question(db: Session, user_id: int, question: str) -> AskResponse:
-    chunks = retrieve_relevant_chunks(db, user_id=user_id, question=question)
-    if not chunks:
-        if _requests_general_explanation(question):
-            general_answer = generate_general_answer(question)
-            return AskResponse(
-                answer=(
-                    general_answer
-                    or "General explanation mode is limited without an AI API key."
-                ),
-                citations=[],
-                confidence=0.2 if general_answer else 0.0,
-            )
-
-        return AskResponse(
-            answer=_missing_information_answer(question),
-            citations=[],
-            confidence=0.0,
-        )
-
-    question_tokens = Counter(_tokens(question))
-    citations: list[CitationItem] = []
-    overlap_total = 0.0
-
-    for chunk in chunks:
-        chunk_tokens = Counter(_tokens(chunk.chunk_text))
-        overlap = set(question_tokens).intersection(chunk_tokens)
-        overlap_total += sum(question_tokens[token] for token in overlap)
-        snippet = _best_snippet(chunk.chunk_text, question_tokens, max_chars=280)
-        citations.append(
-            CitationItem(
-                document_name=chunk.document.document_name,
-                topic_label=chunk.topic_label,
-                snippet=snippet,
-                page_start=chunk.page_start,
-                page_end=chunk.page_end,
-                relevance=round(float(getattr(chunk, "_rag_score", 0.0)), 3),
-            )
-        )
-        _upsert_mastery(db, user_id, chunk.topic_label, delta=2.0)
-
-    db.commit()
-
-    confidence = min(0.97, 0.45 + overlap_total * 0.06)
-    context_blocks = _build_rag_context_blocks(chunks)
-    answer = generate_grounded_answer(question, citations, context_blocks)
-    if answer is None:
-        answer = (
-            "Here is a grounded answer based on your uploaded material:\n\n"
-            + "\n\n".join(
-                f"{citation.topic_label}\n- {citation.snippet} ({citation.document_name}, "
-                f"{'p. ' + str(citation.page_start) if citation.page_start else 'page unknown'})"
-                for citation in citations
-            )
-            + "\n\nUse the citations to review the exact source language, then follow with flashcards or a quiz on the same topic."
-        )
-    return AskResponse(answer=answer, citations=citations, confidence=round(confidence, 2))
+def answer_question(db: Session, user_id: int, question: str, document_id: int | None = None) -> AskResponse:
+    response = answer_question_with_rag(db, user_id=user_id, question=question, document_id=document_id)
+    if response.answer_status == "answered_from_documents":
+        for source in response.sources:
+            if source.topic_label != "General AI knowledge":
+                _upsert_mastery(db, user_id, source.topic_label, delta=2.0)
+        db.commit()
+    return response
 
 
 def _difficulty_from_text(text: str) -> str:
@@ -394,11 +128,12 @@ def generate_flashcards(
     difficulty: str,
     topic: str | None = None,
 ) -> FlashcardGenerateResponse:
-    chunks = retrieve_relevant_chunks(
+    chunks = retrieve_rag_chunks(
         db,
         user_id=user_id,
         question=topic or "important concepts key ideas exam review",
-        limit=max(count, 6),
+        top_k=max(count * 2, 12),
+        final_limit=max(count, 6),
         topic=topic,
     )
     if not chunks:
@@ -425,6 +160,9 @@ def generate_flashcards(
                 )
             )
             if existing is not None:
+                existing.source_document_name = existing.source_document_name or chunk.document.document_name
+                existing.source_page_start = existing.source_page_start or chunk.page_start
+                existing.source_snippet = existing.source_snippet or sentence[:320]
                 created.append(existing)
             else:
                 flashcard = Flashcard(
@@ -433,6 +171,9 @@ def generate_flashcards(
                     question=prompt,
                     answer=answer,
                     difficulty=card_difficulty,
+                    source_document_name=chunk.document.document_name,
+                    source_page_start=chunk.page_start,
+                    source_snippet=sentence[:320],
                 )
                 db.add(flashcard)
                 db.flush()
@@ -568,11 +309,12 @@ def generate_quiz(
     difficulty: str,
     topic: str | None = None,
 ) -> QuizGenerateResponse:
-    chunks = retrieve_relevant_chunks(
+    chunks = retrieve_rag_chunks(
         db,
         user_id=user_id,
         question=topic or "practice quiz review important concepts",
-        limit=max(question_count * 2, 8),
+        top_k=max(question_count * 3, 12),
+        final_limit=max(question_count * 2, 8),
         topic=topic,
     )
     if not chunks:
@@ -593,6 +335,8 @@ def generate_quiz(
             question = _build_question(chunk.topic_label, sentence, all_topics, difficulty, question_type)
             if question is None or question.prompt in seen_prompts:
                 continue
+            question.source_document_name = chunk.document.document_name
+            question.source_page_start = chunk.page_start
             seen_prompts.add(question.prompt)
             questions.append(question)
             if len(questions) >= question_count:

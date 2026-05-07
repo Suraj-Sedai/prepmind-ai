@@ -6,21 +6,28 @@ from pydantic import BaseModel, Field
 
 class CitationItem(BaseModel):
     document_name: str
+    file_name: str | None = None
     topic_label: str
     snippet: str
     page_start: int | None = None
     page_end: int | None = None
+    page_or_slide: str | None = None
     relevance: float | None = None
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=4, max_length=500)
+    document_id: int | None = None
 
 
 class AskResponse(BaseModel):
+    answer_status: Literal["answered_from_documents", "not_found_in_documents", "general_ai_fallback"]
     answer: str
+    sources: list[CitationItem]
     citations: list[CitationItem]
     confidence: float
+    confidence_label: Literal["high", "medium", "low", "general"]
+    used_general_ai: bool
 
 
 class RecommendationItem(BaseModel):
@@ -73,6 +80,9 @@ class FlashcardItem(BaseModel):
     answer: str
     difficulty: str
     student_rating: str | None = None
+    source_document_name: str | None = None
+    source_page_start: int | None = None
+    source_snippet: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -108,6 +118,8 @@ class QuizQuestion(BaseModel):
     difficulty: str
     options: list[QuestionOption] = []
     source_snippet: str
+    source_document_name: str | None = None
+    source_page_start: int | None = None
     answer_token: str
 
 

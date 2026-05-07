@@ -124,10 +124,10 @@ export function fetchRecommendations() {
   return request<RecommendationItem[]>("/api/recommendations");
 }
 
-export function askQuestion(question: string) {
+export function askQuestion(question: string, documentId?: number | null) {
   return request<AskResponse>("/api/ask", {
     method: "POST",
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, document_id: documentId ?? null }),
   });
 }
 

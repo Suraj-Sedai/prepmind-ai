@@ -37,13 +37,30 @@ def ensure_runtime_schema(engine: Engine) -> None:
         if "embedding_vector" not in chunk_columns:
             statements.append("ALTER TABLE document_chunks ADD COLUMN embedding_vector TEXT")
         if "embedding_model" not in chunk_columns:
-            statements.append("ALTER TABLE document_chunks ADD COLUMN embedding_model VARCHAR(120) NOT NULL DEFAULT 'local-hash-v1'")
+            statements.append("ALTER TABLE document_chunks ADD COLUMN embedding_model VARCHAR(120) NOT NULL DEFAULT ''")
         if "embedding_norm" not in chunk_columns:
             statements.append("ALTER TABLE document_chunks ADD COLUMN embedding_norm VARCHAR(32)")
         if "page_start" not in chunk_columns:
             statements.append("ALTER TABLE document_chunks ADD COLUMN page_start INTEGER")
         if "page_end" not in chunk_columns:
             statements.append("ALTER TABLE document_chunks ADD COLUMN page_end INTEGER")
+        if "section_heading" not in chunk_columns:
+            statements.append("ALTER TABLE document_chunks ADD COLUMN section_heading VARCHAR(180)")
+        if "content_type" not in chunk_columns:
+            statements.append("ALTER TABLE document_chunks ADD COLUMN content_type VARCHAR(80) NOT NULL DEFAULT 'supporting_content'")
+        if "importance_score" not in chunk_columns:
+            statements.append("ALTER TABLE document_chunks ADD COLUMN importance_score FLOAT NOT NULL DEFAULT 0.5")
+        if "metadata_json" not in chunk_columns:
+            statements.append("ALTER TABLE document_chunks ADD COLUMN metadata_json TEXT")
+
+    if "flashcards" in table_names:
+        flashcard_columns = {column["name"] for column in inspector.get_columns("flashcards")}
+        if "source_document_name" not in flashcard_columns:
+            statements.append("ALTER TABLE flashcards ADD COLUMN source_document_name VARCHAR(255)")
+        if "source_page_start" not in flashcard_columns:
+            statements.append("ALTER TABLE flashcards ADD COLUMN source_page_start INTEGER")
+        if "source_snippet" not in flashcard_columns:
+            statements.append("ALTER TABLE flashcards ADD COLUMN source_snippet TEXT")
 
     if not statements:
         return

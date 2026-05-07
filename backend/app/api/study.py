@@ -76,7 +76,7 @@ def ask(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> AskResponse:
-    return answer_question(db, current_user.id, payload.question)
+    return answer_question(db, current_user.id, payload.question, payload.document_id)
 
 
 @router.get("/flashcards", response_model=FlashcardListResponse)

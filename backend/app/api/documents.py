@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 from uuid import uuid4
 
@@ -11,17 +12,14 @@ from app.db.session import get_db
 from app.models.document import Document, DocumentChunk
 from app.models.study import TopicMastery
 from app.models.user import User
-from app.schemas.documents import DeleteDocumentResponse, DocumentListResponse, UploadResponse
-from app.services.embedding_service import embed_texts, serialize_vector
-from app.services.document_processor import (
-    choose_chunk_topic,
-    process_document,
-)
+from app.rag.chunking import process_document
+from app.rag.embeddings import EmbeddingProviderUnavailable, embed_texts, serialize_vector
+from app.schemas.documents import DeleteDocumentResponse, DocumentListResponse, DocumentRead, UploadResponse
 from app.utils.files import sanitize_filename
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
-ALLOWED_SUFFIXES = {".pdf", ".txt", ".docx"}
+ALLOWED_SUFFIXES = {".pdf", ".txt", ".md", ".docx"}
 settings = get_settings()
 MAX_UPLOAD_SIZE_BYTES = settings.max_upload_size_mb * 1024 * 1024
 
@@ -54,6 +52,20 @@ def list_documents(
     return DocumentListResponse(items=items)
 
 
+@router.get("/{document_id}", response_model=DocumentRead)
+def get_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DocumentRead:
+    document = db.scalar(
+        select(Document).where(Document.id == document_id, Document.user_id == current_user.id)
+    )
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return document
+
+
 @router.delete("/{document_id}", response_model=DeleteDocumentResponse)
 def delete_document(
     document_id: int,
@@ -82,7 +94,7 @@ async def upload_document(
     original_name = file.filename or "document"
     suffix = Path(original_name).suffix.lower()
     if suffix not in ALLOWED_SUFFIXES:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, TXT, or DOCX.")
+        raise HTTPException(status_code=400, detail="Unsupported file type. Use PDF, DOCX, TXT, or MD.")
 
     course_label = course_name.strip() or "General"
     if len(course_label) > 120:
@@ -123,7 +135,7 @@ async def upload_document(
         document_type=suffix.lstrip("."),
         course_name=course_label,
         stored_path=str(stored_path.resolve()),
-        processing_status="processing",
+        processing_status="uploaded",
         chunk_count=0,
         file_size_bytes=len(file_bytes),
         extracted_word_count=0,
@@ -136,28 +148,40 @@ async def upload_document(
 
     try:
         stored_path.write_bytes(file_bytes)
+        document.processing_status = "processing"
+        db.commit()
+
         processed = process_document(stored_path)
-        if processed.word_count < 40:
+        if processed.scanned_or_empty:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded file appears to be scanned or contains no extractable text. OCR is not available yet.",
+            )
+        if processed.word_count < 40 or not processed.chunks:
             raise HTTPException(status_code=400, detail="The uploaded file does not contain enough readable text.")
 
-        document.processing_status = "processed"
+        chunk_texts = [chunk.text for chunk in processed.chunks]
+        chunk_vectors, embedding_model = embed_texts(chunk_texts, task_type="RETRIEVAL_DOCUMENT")
+
+        document.processing_status = "ready"
         document.chunk_count = len(processed.chunks)
         document.extracted_word_count = processed.word_count
         document.topic_summary = ", ".join(processed.topics[:5])
         document.error_message = None
-        chunk_texts = [chunk.text for chunk in processed.chunks]
-        chunk_vectors, embedding_model = embed_texts(chunk_texts, task_type="RETRIEVAL_DOCUMENT")
 
         for index, chunk in enumerate(processed.chunks):
-            topic = chunk.topic_label or choose_chunk_topic(chunk.text, processed.topics)
             db.add(
                 DocumentChunk(
                     document_id=document.id,
                     chunk_index=index,
                     chunk_text=chunk.text,
-                    topic_label=topic,
+                    topic_label=chunk.topic_label or "General",
                     page_start=chunk.page_start,
                     page_end=chunk.page_end,
+                    section_heading=chunk.section_heading,
+                    content_type=chunk.content_type,
+                    importance_score=chunk.importance_score,
+                    metadata_json=json.dumps(chunk.metadata),
                     chunk_word_count=len(chunk.text.split()),
                     embedding_vector=serialize_vector(chunk_vectors[index]) if index < len(chunk_vectors) else None,
                     embedding_model=embedding_model,
@@ -192,6 +216,12 @@ async def upload_document(
             document=document,
             topics_detected=processed.topics,
         )
+    except EmbeddingProviderUnavailable as exc:
+        document.processing_status = "failed"
+        document.error_message = str(exc)
+        db.commit()
+        remove_document_file(str(stored_path))
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     except HTTPException as exc:
         document.processing_status = "failed"
         document.error_message = exc.detail

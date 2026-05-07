@@ -3,7 +3,7 @@ https://prepmind-ai-875743593015.europe-west1.run.app/
 
 PrepMind AI is a local-first study app with a deliberately simple core flow:
 
-- upload notes in `PDF`, `TXT`, and `DOCX`
+- upload notes in `PDF`, `TXT`, `MD`, and `DOCX`
 - ask questions in the built-in AI chat
 - generate flashcards from uploaded material
 - generate quizzes from uploaded material
@@ -29,6 +29,7 @@ Documents:
 
 - `POST /api/documents/upload`
 - `GET /api/documents`
+- `GET /api/documents/{id}`
 - `DELETE /api/documents/{id}`
 
 Study:
@@ -46,14 +47,15 @@ The app works without an external model key.
 
 Current behavior:
 
-- document text is extracted, cleaned, chunked, and topic-labeled
-- chunk embeddings are stored with each uploaded document
-- retrieval uses vector similarity plus token overlap
-- answers use the master RAG prompt in `prompt/rag1.md`
-- answers are closed-domain and grounded in uploaded notes when relevant citations are found
-- if no relevant notes are found, chat asks whether the student wants a general explanation instead of guessing
+- document text is extracted page-by-page or section-by-section, cleaned, chunked, topic-labeled, and scored for importance
+- junk content such as table-of-contents pages, page numbers, repeated headers/footers, and empty fragments is skipped
+- chunk embeddings are created once at upload time and stored with metadata, source location, content type, and importance score
+- retrieval is filtered by `user_id` and optionally by the selected document, then ranked with vector similarity, keyword overlap, and importance
+- answers return structured status: `answered_from_documents`, `not_found_in_documents`, or `general_ai_fallback`
+- document-grounded answers include real retrieved sources; general AI fallback is clearly labeled as not from uploaded materials
+- the implementation follows the RAG requirements in `prompt/rag1.md`; runtime answer prompts live in `backend/app/rag/prompts.py`
 
-If an OpenAI API key is configured, the backend can use OpenAI embeddings and model-backed answers. Without that key, it falls back to local embeddings and local synthesis.
+Configure either `PREPMIND_GEMINI_API_KEY` or `PREPMIND_OPENAI_API_KEY` before uploading materials. The app no longer stores local hash or placeholder embeddings; missing embedding credentials produce a clear upload error instead of fake vectors.
 
 ## Document Pipeline
 
@@ -61,7 +63,8 @@ If an OpenAI API key is configured, the backend can use OpenAI embeddings and mo
 - file type and size validation
 - duplicate protection with optional replace
 - delete support
-- processing states: `processing`, `processed`, `failed`
+- processing states: `uploaded`, `processing`, `ready`, `failed`
+- scanned PDFs without extractable text fail clearly because OCR is not implemented yet
 
 ## Run The Backend
 

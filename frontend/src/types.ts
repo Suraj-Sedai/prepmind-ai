@@ -87,17 +87,23 @@ export interface DeleteDocumentResponse {
 
 export interface CitationItem {
   document_name: string;
+  file_name?: string | null;
   topic_label: string;
   snippet: string;
   page_start?: number | null;
   page_end?: number | null;
+  page_or_slide?: string | null;
   relevance?: number | null;
 }
 
 export interface AskResponse {
+  answer_status: "answered_from_documents" | "not_found_in_documents" | "general_ai_fallback";
   answer: string;
+  sources: CitationItem[];
   citations: CitationItem[];
   confidence: number;
+  confidence_label: "high" | "medium" | "low" | "general";
+  used_general_ai: boolean;
 }
 
 export interface ProgressResponse {
@@ -116,6 +122,9 @@ export interface FlashcardItem {
   answer: string;
   difficulty: string;
   student_rating?: string | null;
+  source_document_name?: string | null;
+  source_page_start?: number | null;
+  source_snippet?: string | null;
 }
 
 export interface FlashcardListResponse {
@@ -149,6 +158,8 @@ export interface QuizQuestion {
   difficulty: string;
   options: QuestionOption[];
   source_snippet: string;
+  source_document_name?: string | null;
+  source_page_start?: number | null;
   answer_token: string;
 }
 

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -16,7 +16,7 @@ class Document(Base):
     upload_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     course_name: Mapped[str] = mapped_column(String(120), default="General")
     stored_path: Mapped[str] = mapped_column(String(512))
-    processing_status: Mapped[str] = mapped_column(String(32), default="processed")
+    processing_status: Mapped[str] = mapped_column(String(32), default="uploaded")
     chunk_count: Mapped[int] = mapped_column(Integer, default=0)
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     extracted_word_count: Mapped[int] = mapped_column(Integer, default=0)
@@ -37,9 +37,13 @@ class DocumentChunk(Base):
     topic_label: Mapped[str] = mapped_column(String(120), default="General")
     page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
     page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section_heading: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    content_type: Mapped[str] = mapped_column(String(80), default="supporting_content")
+    importance_score: Mapped[float] = mapped_column(Float, default=0.5)
+    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     chunk_word_count: Mapped[int] = mapped_column(Integer, default=0)
     embedding_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
-    embedding_model: Mapped[str] = mapped_column(String(120), default="local-hash-v1")
+    embedding_model: Mapped[str] = mapped_column(String(120), default="")
     embedding_norm: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     document = relationship("Document", back_populates="chunks")

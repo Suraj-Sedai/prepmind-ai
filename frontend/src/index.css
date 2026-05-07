@@ -850,6 +850,43 @@ svg {
   font-size: 0.875rem;
 }
 
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 24px;
+  margin-right: 8px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.status-pill.ready,
+.status-pill.processed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.status-pill.processing,
+.status-pill.uploaded {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-pill.failed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.file-error {
+  margin-top: 6px;
+  color: #991b1b;
+  font-size: 0.8125rem;
+}
+
 .chat-panel {
   display: grid;
   min-height: 640px;
@@ -911,6 +948,35 @@ svg {
   gap: 10px;
 }
 
+.answer-status {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--primary);
+  background: var(--primary-soft);
+}
+
+.answer-status strong {
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.answer-status span {
+  color: var(--secondary);
+  font-size: 0.8125rem;
+}
+
+.answer-status.missing {
+  border-left-color: #dc2626;
+  background: #fef2f2;
+}
+
+.answer-status.general {
+  border-left-color: #d97706;
+  background: #fffbeb;
+}
+
 .formatted-block {
   display: grid;
   gap: 8px;
@@ -927,11 +993,28 @@ svg {
 }
 
 .sources-line {
+  display: grid;
+  gap: 5px;
   margin-top: 12px;
   padding-top: 10px;
   border-top: 1px solid var(--border);
   color: var(--secondary);
   font-size: 0.875rem;
+}
+
+.sources-line strong {
+  color: var(--text);
+  font-size: 0.8125rem;
+}
+
+.sources-line span {
+  color: var(--secondary);
+}
+
+.source-footnote {
+  display: block;
+  color: var(--secondary);
+  font-size: 0.8125rem;
   font-weight: 700;
 }
 

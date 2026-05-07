@@ -44,6 +44,10 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("PREPMIND_OPENAI_API_KEY", "OPENAI_API_KEY"),
     )
+    allow_general_ai_fallback: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("PREPMIND_ALLOW_GENERAL_AI_FALLBACK", "ALLOW_GENERAL_AI_FALLBACK"),
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

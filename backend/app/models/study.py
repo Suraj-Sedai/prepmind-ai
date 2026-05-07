@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, ForeignKey, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -45,6 +45,9 @@ class Flashcard(Base):
     answer: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[str] = mapped_column(String(32), default="medium")
     student_rating: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    source_document_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    source_page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    source_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="flashcards")
