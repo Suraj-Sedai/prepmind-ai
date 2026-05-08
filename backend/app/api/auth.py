@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from pathlib import Path
 from secrets import token_urlsafe
+from typing import Optional
 from urllib.parse import urlencode
 from uuid import uuid4
 
@@ -38,7 +41,7 @@ def google_redirect_uri(request: Request) -> str:
     return str(request.url_for("google_callback"))
 
 
-def frontend_redirect(params: dict[str, str] | None = None) -> RedirectResponse:
+def frontend_redirect(params: Optional[dict[str, str]] = None) -> RedirectResponse:
     base_url = settings.frontend_origin.rstrip("/")
     if not params:
         return RedirectResponse(f"{base_url}/", status_code=status.HTTP_302_FOUND)
@@ -53,7 +56,7 @@ def provider_error(response: httpx.Response) -> str:
     return f"{response.status_code} {response.reason_phrase}: {payload}"
 
 
-def remove_existing_profile_image(relative_path: str | None) -> None:
+def remove_existing_profile_image(relative_path: Optional[str]) -> None:
     if not relative_path:
         return
     target = settings.upload_path / relative_path
@@ -113,9 +116,9 @@ def google_start(request: Request) -> RedirectResponse:
 @router.get("/google/callback", name="google_callback")
 def google_callback(
     request: Request,
-    code: str | None = None,
-    state: str | None = None,
-    error: str | None = None,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
     db: Session = Depends(get_db),
 ) -> RedirectResponse:
     if error:

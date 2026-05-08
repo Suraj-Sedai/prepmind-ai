@@ -2,6 +2,11 @@ import type {
   AskResponse,
   AuthPayload,
   AuthResponse,
+  ChatAskRequest,
+  ChatAskResponse,
+  ChatThreadCreateRequest,
+  ChatThreadDetailResponse,
+  ChatThreadListResponse,
   DashboardResponse,
   DeleteDocumentResponse,
   DocumentListResponse,
@@ -132,6 +137,41 @@ export function askQuestion(question: string, documentId?: number | null) {
   return request<AskResponse>("/api/ask", {
     method: "POST",
     body: JSON.stringify({ question, document_id: documentId ?? null }),
+  });
+}
+
+export function fetchChatThreads() {
+  return request<ChatThreadListResponse>("/api/chat/threads");
+}
+
+export function createChatThread(payload: ChatThreadCreateRequest = {}) {
+  return request<ChatThreadDetailResponse>("/api/chat/threads", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function fetchChatThread(threadId: number) {
+  return request<ChatThreadDetailResponse>(`/api/chat/threads/${threadId}`);
+}
+
+export function deleteChatThread(threadId: number) {
+  return request<{ message: string; thread_id: number }>(`/api/chat/threads/${threadId}`, {
+    method: "DELETE",
+  });
+}
+
+export function askChatThread(threadId: number, payload: ChatAskRequest) {
+  return request<ChatAskResponse>(`/api/chat/threads/${threadId}/ask`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export function createChatThreadAndAsk(payload: ChatAskRequest) {
+  return request<ChatAskResponse>("/api/chat/ask", {
+    method: "POST",
+    body: JSON.stringify(payload),
   });
 }
 

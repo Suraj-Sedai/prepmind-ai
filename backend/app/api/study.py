@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -81,7 +85,7 @@ def ask(
 
 @router.get("/flashcards", response_model=FlashcardListResponse)
 def flashcards(
-    topic: str | None = Query(default=None),
+    topic: Optional[str] = Query(default=None),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> FlashcardListResponse:

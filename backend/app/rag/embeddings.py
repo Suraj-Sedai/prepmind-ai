@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import json
 import math
-from typing import Literal
+from typing import Literal, Optional
 
 import httpx
 
@@ -64,11 +66,11 @@ def _gemini_batches(texts: list[str]) -> list[list[str]]:
 def _embed_with_gemini(
     texts: list[str],
     task_type: EmbeddingTaskType,
-) -> tuple[list[list[float]], str] | None:
+) -> Optional[tuple[list[list[float]], str]]:
     if not settings.gemini_api_key:
         return None
 
-    def embed_single(text: str) -> list[float] | None:
+    def embed_single(text: str) -> Optional[list[float]]:
         prepared = _trim_for_embedding(text)
         response = httpx.post(
             f"{settings.gemini_base_url}/models/{settings.gemini_embedding_model}:embedContent",
@@ -140,7 +142,7 @@ def _embed_with_gemini(
     return None
 
 
-def _embed_with_openai(texts: list[str]) -> tuple[list[list[float]], str] | None:
+def _embed_with_openai(texts: list[str]) -> Optional[tuple[list[list[float]], str]]:
     if not settings.openai_api_key:
         return None
 
@@ -170,7 +172,7 @@ def embed_texts(
     if not texts:
         return [], ""
 
-    last_error: Exception | None = None
+    last_error: Optional[Exception] = None
     for embedder in (
         lambda: _embed_with_gemini(texts, task_type),
         lambda: _embed_with_openai(texts),
@@ -198,7 +200,7 @@ def serialize_vector(vector: list[float]) -> str:
     return json.dumps(vector)
 
 
-def deserialize_vector(payload: str | None) -> list[float]:
+def deserialize_vector(payload: Optional[str]) -> list[float]:
     if not payload:
         return []
     return [float(value) for value in json.loads(payload)]

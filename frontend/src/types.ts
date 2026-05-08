@@ -106,6 +106,55 @@ export interface AskResponse {
   used_general_ai: boolean;
 }
 
+export interface ChatThreadItem {
+  id: number;
+  title: string;
+  course_name?: string | null;
+  document_id?: number | null;
+  document_name?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessageItem {
+  id: number;
+  thread_id: number;
+  role: "user" | "assistant";
+  content: string;
+  answer_status?: AskResponse["answer_status"] | null;
+  confidence_label?: AskResponse["confidence_label"] | null;
+  used_general_ai: boolean;
+  citations: CitationItem[];
+  created_at: string;
+}
+
+export interface ChatThreadListResponse {
+  items: ChatThreadItem[];
+}
+
+export interface ChatThreadDetailResponse {
+  thread: ChatThreadItem;
+  messages: ChatMessageItem[];
+}
+
+export interface ChatThreadCreateRequest {
+  title?: string;
+  document_id?: number | null;
+  course_name?: string | null;
+}
+
+export interface ChatAskRequest {
+  question: string;
+  document_id?: number | null;
+}
+
+export interface ChatAskResponse {
+  thread: ChatThreadItem;
+  user_message: ChatMessageItem;
+  assistant_message: ChatMessageItem;
+  messages: ChatMessageItem[];
+}
+
 export interface ProgressResponse {
   readiness_score: number;
   study_streak_days: number;
@@ -160,6 +209,7 @@ export interface QuizQuestion {
   source_snippet: string;
   source_document_name?: string | null;
   source_page_start?: number | null;
+  explanation?: string | null;
   answer_token: string;
 }
 
@@ -190,6 +240,7 @@ export interface QuizResultItem {
   correct_answer: string;
   is_correct: boolean;
   feedback: string;
+  explanation?: string | null;
 }
 
 export interface QuizSubmitResponse {

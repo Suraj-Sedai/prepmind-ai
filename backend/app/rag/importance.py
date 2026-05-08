@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 import re
+from typing import Optional
 from collections import Counter
 
 from app.rag.clean_text import is_junk_text
@@ -77,7 +80,7 @@ def _topic_from_text(text: str, fallback: str = "General") -> str:
     return fallback
 
 
-def detect_important_content(text: str, section_heading: str | None = None) -> ContentImportance:
+def detect_important_content(text: str, section_heading: Optional[str] = None) -> ContentImportance:
     if is_junk_text(text):
         return ContentImportance("junk_content", 0.0, section_heading or "General", "junk", "empty or boilerplate text")
 
@@ -132,4 +135,3 @@ def extract_topics_from_chunks(chunks: list[tuple[str, str]], limit: int = 5) ->
         if len(topics) >= limit:
             return topics
     return topics or ["General"]
-

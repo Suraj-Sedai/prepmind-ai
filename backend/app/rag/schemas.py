@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import Optional, Union
 from typing import Literal
 
 
@@ -9,12 +12,12 @@ ConfidenceLabel = Literal["high", "medium", "low", "general"]
 
 @dataclass(frozen=True)
 class ExtractedTextUnit:
-    page_number: int | None
-    slide_number: int | None
+    page_number: Optional[int]
+    slide_number: Optional[int]
     source_label: str
     original_text: str
     cleaned_text: str = ""
-    section_heading: str | None = None
+    section_heading: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -31,14 +34,14 @@ class ProcessedChunk:
     text: str
     original_text: str
     topic_label: str
-    page_start: int | None
-    page_end: int | None
-    slide_start: int | None = None
-    slide_end: int | None = None
-    section_heading: str | None = None
+    page_start: Optional[int]
+    page_end: Optional[int]
+    slide_start: Optional[int] = None
+    slide_end: Optional[int] = None
+    section_heading: Optional[str] = None
     content_type: str = "supporting_content"
     importance_score: float = 0.5
-    metadata: dict[str, str | int | float | None] = field(default_factory=dict)
+    metadata: dict[str, Optional[Union[str, int, float]]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -58,4 +61,3 @@ class ContextSupport:
     confidence: ConfidenceLabel
     score: float
     reason: str
-

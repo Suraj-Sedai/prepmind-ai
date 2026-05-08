@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -44,10 +47,10 @@ class Flashcard(Base):
     question: Mapped[str] = mapped_column(Text)
     answer: Mapped[str] = mapped_column(Text)
     difficulty: Mapped[str] = mapped_column(String(32), default="medium")
-    student_rating: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    source_document_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    source_page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    source_snippet: Mapped[str | None] = mapped_column(Text, nullable=True)
+    student_rating: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    source_document_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    source_page_start: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    source_snippet: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="flashcards")

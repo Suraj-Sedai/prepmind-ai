@@ -757,6 +757,7 @@ svg {
 .stack-list,
 .source-list,
 .deck-list,
+.thread-list,
 .topic-list {
   display: grid;
   gap: 12px;
@@ -830,6 +831,90 @@ svg {
   align-self: start;
 }
 
+.chat-sidebar-header,
+.active-thread-bar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.chat-sidebar-header {
+  margin-bottom: 16px;
+}
+
+.chat-sidebar-header p,
+.active-thread-bar span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.thread-list {
+  margin-bottom: 22px;
+}
+
+.thread-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #ffffff;
+}
+
+.thread-row.active {
+  border-color: var(--primary);
+  background: var(--primary-soft);
+}
+
+.thread-row > button:first-child,
+.thread-delete {
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.thread-row > button:first-child {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+  padding: 4px;
+  text-align: left;
+}
+
+.thread-row strong,
+.active-thread-bar strong {
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-row span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.thread-delete {
+  align-self: center;
+  padding: 6px 8px;
+  color: var(--error);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.thread-delete:hover {
+  background: #fef2f2;
+}
+
 .source-list {
   margin: 16px 0;
 }
@@ -890,8 +975,19 @@ svg {
 .chat-panel {
   display: grid;
   min-height: 640px;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr auto;
   gap: 14px;
+}
+
+.active-thread-bar {
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.active-thread-bar > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
 }
 
 .chat-history {

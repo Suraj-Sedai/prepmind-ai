@@ -31,6 +31,8 @@ def remove_document_file(path_value: str) -> None:
 
 
 def remove_existing_document(document: Document, db: Session) -> None:
+    for thread in document.chat_threads:
+        thread.document_id = None
     remove_document_file(document.stored_path)
     db.delete(document)
 

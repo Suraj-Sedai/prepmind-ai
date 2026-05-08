@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -21,10 +24,11 @@ class Document(Base):
     file_size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     extracted_word_count: Mapped[int] = mapped_column(Integer, default=0)
     topic_summary: Mapped[str] = mapped_column(String(255), default="")
-    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     user = relationship("User", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan")
+    chat_threads = relationship("ChatThread", back_populates="document")
 
 
 class DocumentChunk(Base):
@@ -35,15 +39,15 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer)
     chunk_text: Mapped[str] = mapped_column(Text)
     topic_label: Mapped[str] = mapped_column(String(120), default="General")
-    page_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    page_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    section_heading: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    page_start: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    page_end: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    section_heading: Mapped[Optional[str]] = mapped_column(String(180), nullable=True)
     content_type: Mapped[str] = mapped_column(String(80), default="supporting_content")
     importance_score: Mapped[float] = mapped_column(Float, default=0.5)
-    metadata_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     chunk_word_count: Mapped[int] = mapped_column(Integer, default=0)
-    embedding_vector: Mapped[str | None] = mapped_column(Text, nullable=True)
+    embedding_vector: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     embedding_model: Mapped[str] = mapped_column(String(120), default="")
-    embedding_norm: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    embedding_norm: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
 
     document = relationship("Document", back_populates="chunks")

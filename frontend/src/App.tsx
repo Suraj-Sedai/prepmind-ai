@@ -2,9 +2,14 @@ import { startTransition, useEffect, useState } from "react";
 import type { DragEvent, FormEvent, ReactNode } from "react";
 import logoMark from "./assets/prepmind-mark.svg";
 import {
-  askQuestion,
+  askChatThread,
+  createChatThread,
+  createChatThreadAndAsk,
   deleteDocument,
+  deleteChatThread,
   fetchDashboard,
+  fetchChatThread,
+  fetchChatThreads,
   fetchDocuments,
   fetchFlashcards,
   fetchProgress,
@@ -23,6 +28,8 @@ import {
 } from "./api";
 import type {
   AskResponse,
+  ChatMessageItem,
+  ChatThreadItem,
   DashboardResponse,
   DocumentItem,
   FlashcardItem,
@@ -44,14 +51,7 @@ type WorkspaceSnapshot = {
   flashcards: FlashcardItem[];
   dashboard: DashboardResponse | null;
   progress: ProgressResponse | null;
-};
-type ChatExchange = {
-  question: string;
-  answer: string;
-  answerStatus: AskResponse["answer_status"];
-  confidenceLabel: AskResponse["confidence_label"];
-  usedGeneralAi: boolean;
-  citations: AskResponse["citations"];
+  chatThreads: ChatThreadItem[];
 };
 
 const views: Array<{ key: ViewKey; label: string; icon: IconName }> = [
@@ -316,7 +316,10 @@ function App() {
   const [uploadDragging, setUploadDragging] = useState(false);
 
   const [question, setQuestion] = useState("");
-  const [chatHistory, setChatHistory] = useState<ChatExchange[]>([]);
+  const [chatThreads, setChatThreads] = useState<ChatThreadItem[]>([]);
+  const [selectedChatThreadId, setSelectedChatThreadId] = useState<number | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessageItem[]>([]);
+  const [chatMessage, setChatMessage] = useState("Select a conversation or start a new one.");
   const [pendingQuestion, setPendingQuestion] = useState<string | null>(null);
 
   const [flashcards, setFlashcards] = useState<FlashcardItem[]>([]);
@@ -362,17 +365,19 @@ function App() {
   }
 
   async function loadWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
-    const [documentPayload, flashcardPayload, dashboardPayload, progressPayload] = await Promise.all([
+    const [documentPayload, flashcardPayload, dashboardPayload, progressPayload, chatThreadPayload] = await Promise.all([
       fetchDocuments(),
       fetchFlashcards(),
       fetchDashboard().catch(() => null),
       fetchProgress().catch(() => null),
+      fetchChatThreads().catch(() => ({ items: [] })),
     ]);
     return {
       documents: documentPayload.items,
       flashcards: flashcardPayload.items,
       dashboard: dashboardPayload,
       progress: progressPayload,
+      chatThreads: chatThreadPayload.items,
     };
   }
 
@@ -381,7 +386,10 @@ function App() {
       setDocuments([]);
       setSelectedDocumentId(null);
       setFlashcards([]);
-      setChatHistory([]);
+      setChatThreads([]);
+      setSelectedChatThreadId(null);
+      setChatMessages([]);
+      setChatMessage("Select a conversation or start a new one.");
       setPendingQuestion(null);
       setQuizQuestions([]);
       setQuizAnswers({});
@@ -397,6 +405,16 @@ function App() {
       setFlashcards(snapshot.flashcards);
       setDashboard(snapshot.dashboard);
       setProgress(snapshot.progress);
+      setChatThreads(snapshot.chatThreads);
+      if (!snapshot.chatThreads.length) {
+        setChatMessages([]);
+      }
+      setSelectedChatThreadId((current) => {
+        if (current && snapshot.chatThreads.some((thread) => thread.id === current)) {
+          return current;
+        }
+        return snapshot.chatThreads[0]?.id ?? null;
+      });
       setSelectedDocumentId((current) => {
         if (current && snapshot.documents.some((document) => document.id === current)) {
           return current;
@@ -472,6 +490,49 @@ function App() {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (!currentUser || !selectedChatThreadId) {
+      return;
+    }
+
+    const threadId = selectedChatThreadId;
+    let cancelled = false;
+    async function loadSelectedThread() {
+      try {
+        const payload = await fetchChatThread(threadId);
+        if (cancelled) return;
+        setChatMessages(payload.messages);
+        setChatThreads((current) =>
+          current.some((thread) => thread.id === payload.thread.id)
+            ? current.map((thread) => (thread.id === payload.thread.id ? payload.thread : thread))
+            : [payload.thread, ...current],
+        );
+        if (payload.thread.document_id) {
+          setSelectedDocumentId(payload.thread.document_id);
+        }
+        setChatMessage("Conversation loaded.");
+      } catch (error) {
+        if (cancelled) return;
+        console.error(error);
+        setChatMessage(error instanceof Error ? error.message : "Could not load this conversation.");
+      }
+    }
+
+    void loadSelectedThread();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser, selectedChatThreadId]);
+
+  function upsertChatThread(thread: ChatThreadItem) {
+    setChatThreads((current) => {
+      const withoutThread = current.filter((item) => item.id !== thread.id);
+      return [thread, ...withoutThread].sort(
+        (left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime(),
+      );
+    });
+  }
 
   async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -593,6 +654,55 @@ function App() {
     }
   }
 
+  async function handleCreateChatThread() {
+    setBusyKey("chat-new");
+    setChatMessage("Starting a new conversation...");
+    try {
+      const payload = await createChatThread({
+        document_id: selectedDocumentId,
+        course_name: selectedDocument?.course_name,
+      });
+      upsertChatThread(payload.thread);
+      setSelectedChatThreadId(payload.thread.id);
+      setChatMessages(payload.messages);
+      setQuestion("");
+      setChatMessage("New conversation ready.");
+    } catch (error) {
+      console.error(error);
+      setChatMessage(error instanceof Error ? error.message : "Could not create a conversation.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
+  function handleSelectChatThread(thread: ChatThreadItem) {
+    setSelectedChatThreadId(thread.id);
+    if (thread.document_id) {
+      setSelectedDocumentId(thread.document_id);
+    }
+  }
+
+  async function handleDeleteChatThread(threadId: number) {
+    setBusyKey(`chat-delete-${threadId}`);
+    try {
+      await deleteChatThread(threadId);
+      setChatThreads((current) => {
+        const nextThreads = current.filter((thread) => thread.id !== threadId);
+        if (selectedChatThreadId === threadId) {
+          setSelectedChatThreadId(nextThreads[0]?.id ?? null);
+          setChatMessages([]);
+        }
+        return nextThreads;
+      });
+      setChatMessage("Conversation deleted.");
+    } catch (error) {
+      console.error(error);
+      setChatMessage(error instanceof Error ? error.message : "Could not delete this conversation.");
+    } finally {
+      setBusyKey(null);
+    }
+  }
+
   async function handleAsk(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const submittedQuestion = question.trim();
@@ -600,35 +710,20 @@ function App() {
     setPendingQuestion(submittedQuestion);
     setBusyKey("ask");
     try {
-      const payload = await askQuestion(submittedQuestion, selectedDocumentId);
-      setChatHistory((current) => [
-        ...current,
-        {
-          question: submittedQuestion,
-          answer: payload.answer,
-          answerStatus: payload.answer_status,
-          confidenceLabel: payload.confidence_label,
-          usedGeneralAi: payload.used_general_ai,
-          citations: payload.citations,
-        },
-      ]);
+      const payload = selectedChatThreadId
+        ? await askChatThread(selectedChatThreadId, { question: submittedQuestion, document_id: selectedDocumentId })
+        : await createChatThreadAndAsk({ question: submittedQuestion, document_id: selectedDocumentId });
+      upsertChatThread(payload.thread);
+      setSelectedChatThreadId(payload.thread.id);
+      setChatMessages(payload.messages);
+      setChatMessage("Conversation saved.");
       setQuestion("");
       setPendingQuestion(null);
       void refreshWorkspace("Updating study progress...");
     } catch (error) {
       console.error(error);
       const message = error instanceof Error ? error.message : "AI response failed. Please try again.";
-      setChatHistory((current) => [
-        ...current,
-        {
-          question: submittedQuestion,
-          answer: message,
-          answerStatus: "not_found_in_documents",
-          confidenceLabel: "low",
-          usedGeneralAi: false,
-          citations: [],
-        },
-      ]);
+      setChatMessage(message);
       setQuestion("");
       setPendingQuestion(null);
     } finally {
@@ -773,10 +868,12 @@ function App() {
   }
 
   const selectedDocument = documents.find((document) => document.id === selectedDocumentId) ?? documents[0] ?? null;
+  const selectedChatThread = chatThreads.find((thread) => thread.id === selectedChatThreadId) ?? null;
   const currentFlashcard = flashcards[activeFlashcardIndex] ?? null;
   const currentQuizQuestion = quizQuestions[activeQuizIndex] ?? null;
   const currentQuizResult = quizResult?.results[activeQuizIndex] ?? null;
-  const latestCitations = [...chatHistory].reverse().find((entry) => entry.citations.length)?.citations ?? [];
+  const latestCitations =
+    [...chatMessages].reverse().find((message) => message.role === "assistant" && message.citations.length)?.citations ?? [];
   const latestStudyCitations = latestCitations.filter((citation) => citation.document_name !== "General AI knowledge");
   const filteredDocuments =
     materialFilter === "all"
@@ -1027,6 +1124,54 @@ function App() {
 
         <section className="chat-layout">
           <aside className="panel context-panel">
+            <div className="chat-sidebar-header">
+              <div>
+                <h2>Conversations</h2>
+                <p>Return to previous study chats.</p>
+              </div>
+              <button
+                className="icon-button"
+                disabled={busyKey === "chat-new"}
+                onClick={handleCreateChatThread}
+                title="New chat"
+                type="button"
+              >
+                <Icon name="plus" />
+              </button>
+            </div>
+            <div className="thread-list">
+              {chatThreads.length ? (
+                chatThreads.map((thread) => (
+                  <div className={selectedChatThreadId === thread.id ? "thread-row active" : "thread-row"} key={thread.id}>
+                    <button onClick={() => handleSelectChatThread(thread)} type="button">
+                      <strong>{thread.title}</strong>
+                      <span>{thread.document_name ?? thread.course_name ?? "All materials"}</span>
+                    </button>
+                    <button
+                      className="thread-delete"
+                      disabled={busyKey === `chat-delete-${thread.id}`}
+                      onClick={() => handleDeleteChatThread(thread.id)}
+                      title="Delete conversation"
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))
+              ) : (
+                <EmptyState
+                  icon="chat"
+                  title="No saved chats"
+                  description="Start a conversation to keep your study history."
+                  action={
+                    <button className="secondary-button" disabled={busyKey === "chat-new"} onClick={handleCreateChatThread} type="button">
+                      New Chat
+                    </button>
+                  }
+                />
+              )}
+            </div>
+
             <div className="section-heading">
               <h2>Study Context</h2>
               <p>Choose the material PrepMind should focus on.</p>
@@ -1073,6 +1218,14 @@ function App() {
           </aside>
 
           <article className="panel chat-panel">
+            <div className="active-thread-bar">
+              <div>
+                <span className="small-label">Active conversation</span>
+                <strong>{selectedChatThread?.title ?? "New unsaved chat"}</strong>
+              </div>
+              <span>{selectedChatThread?.document_name ?? selectedDocument?.document_name ?? "All materials"}</span>
+            </div>
+
             <div className="quick-actions">
               {chatSuggestions.map((suggestion) => (
                 <button className="quick-action" key={suggestion} onClick={() => handleQuickAction(suggestion)} type="button">
@@ -1082,39 +1235,44 @@ function App() {
             </div>
 
             <div className="chat-history">
-              {chatHistory.length === 0 && !pendingQuestion ? (
+              {chatMessages.length === 0 && !pendingQuestion ? (
                 <EmptyState
                   icon="chat"
                   title="Ask about your notes"
-                  description="Try asking PrepMind to summarize a chapter or explain a concept in simple words."
+                  description={chatMessage || "Try asking PrepMind to summarize a chapter or explain a concept in simple words."}
                 />
               ) : null}
-              {chatHistory.map((entry, index) => (
-                <div className="message-group" key={`${entry.question}-${index}`}>
-                  <article className="chat-bubble user">
-                    <p>{entry.question}</p>
+              {chatMessages.map((message) =>
+                message.role === "user" ? (
+                  <article className="chat-bubble user" key={message.id}>
+                    <p>{message.content}</p>
                   </article>
-                  <article className="chat-bubble assistant">
+                ) : (
+                  <article className="chat-bubble assistant" key={message.id}>
                     <div className="assistant-header">
                       <Icon name="spark" />
                       <span>PrepMind AI</span>
                     </div>
-                    <div className={`answer-status ${answerStatusClass(entry.answerStatus)}`}>
-                      <strong>{answerStatusLabel(entry.answerStatus)}</strong>
-                      <span>{entry.usedGeneralAi ? "This answer is not from your uploaded materials." : `Confidence: ${entry.confidenceLabel}`}</span>
+                    <div className={`answer-status ${answerStatusClass(message.answer_status ?? "not_found_in_documents")}`}>
+                      <strong>{answerStatusLabel(message.answer_status ?? "not_found_in_documents")}</strong>
+                      <span>
+                        {message.used_general_ai
+                          ? "This answer is not from your uploaded materials."
+                          : `Confidence: ${message.confidence_label ?? "low"}`}
+                      </span>
                     </div>
-                    <div className="assistant-content">{renderAnswerContent(entry.answer)}</div>
-                    {entry.citations.length ? (
+                    <div className="assistant-content">{renderAnswerContent(message.content)}</div>
+                    {message.citations.length ? (
                       <div className="sources-line">
                         <strong>Sources</strong>
-                        {entry.citations.map((citation, citationIndex) => (
+                        {message.citations.map((citation, citationIndex) => (
                           <span key={`${citation.document_name}-${citationIndex}`}>{formatCitation(citation)}</span>
                         ))}
                       </div>
                     ) : null}
                   </article>
-                </div>
-              ))}
+                ),
+              )}
               {pendingQuestion ? (
                 <div className="message-group">
                   <article className="chat-bubble user">
@@ -1388,6 +1546,9 @@ function App() {
                     <div className={currentQuizResult.is_correct ? "explanation correct" : "explanation incorrect"}>
                       <strong>{currentQuizResult.is_correct ? "Correct" : "Review this"}</strong>
                       <p>{currentQuizResult.feedback}</p>
+                      {currentQuizResult.explanation && currentQuizResult.explanation !== currentQuizResult.feedback ? (
+                        <p>{currentQuizResult.explanation}</p>
+                      ) : null}
                       <small>Answer: {currentQuizResult.correct_answer}</small>
                     </div>
                   ) : null}

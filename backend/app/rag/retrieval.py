@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import math
 import re
 from collections import Counter
+from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -85,8 +88,8 @@ def _jaccard(left: set[str], right: set[str]) -> float:
 def _candidate_chunks(
     db: Session,
     user_id: int,
-    topic: str | None = None,
-    document_id: int | None = None,
+    topic: Optional[str] = None,
+    document_id: Optional[int] = None,
 ) -> list[DocumentChunk]:
     query = (
         select(DocumentChunk)
@@ -114,8 +117,8 @@ def retrieve_relevant_chunks(
     question: str,
     top_k: int = 12,
     final_limit: int = 5,
-    topic: str | None = None,
-    document_id: int | None = None,
+    topic: Optional[str] = None,
+    document_id: Optional[int] = None,
 ) -> list[DocumentChunk]:
     chunks = _candidate_chunks(db, user_id, topic, document_id)
     if not chunks:

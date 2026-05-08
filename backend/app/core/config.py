@@ -1,8 +1,14 @@
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
+from typing import Optional
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+PROJECT_ROOT = BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
@@ -27,7 +33,7 @@ class Settings(BaseSettings):
         default="gemini-embedding-001",
         validation_alias=AliasChoices("PREPMIND_GEMINI_EMBEDDING_MODEL", "GEMINI_EMBEDDING_MODEL"),
     )
-    gemini_api_key: str | None = Field(
+    gemini_api_key: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("PREPMIND_GEMINI_API_KEY", "GEMINI_API_KEY"),
     )
@@ -40,7 +46,7 @@ class Settings(BaseSettings):
         default="text-embedding-3-small",
         validation_alias=AliasChoices("PREPMIND_OPENAI_EMBEDDING_MODEL", "OPENAI_EMBEDDING_MODEL"),
     )
-    openai_api_key: str | None = Field(
+    openai_api_key: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("PREPMIND_OPENAI_API_KEY", "OPENAI_API_KEY"),
     )
@@ -48,15 +54,15 @@ class Settings(BaseSettings):
         default=True,
         validation_alias=AliasChoices("PREPMIND_ALLOW_GENERAL_AI_FALLBACK", "ALLOW_GENERAL_AI_FALLBACK"),
     )
-    google_client_id: str | None = Field(
+    google_client_id: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("PREPMIND_GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_ID"),
     )
-    google_client_secret: str | None = Field(
+    google_client_secret: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("PREPMIND_GOOGLE_CLIENT_SECRET", "GOOGLE_CLIENT_SECRET"),
     )
-    google_redirect_uri: str | None = Field(
+    google_redirect_uri: Optional[str] = Field(
         default=None,
         validation_alias=AliasChoices("PREPMIND_GOOGLE_REDIRECT_URI", "GOOGLE_REDIRECT_URI"),
     )
@@ -65,7 +71,7 @@ class Settings(BaseSettings):
     google_oauth_userinfo_url: str = "https://openidconnect.googleapis.com/v1/userinfo"
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(PROJECT_ROOT / ".env", BACKEND_DIR / ".env"),
         env_prefix="PREPMIND_",
         extra="ignore",
     )

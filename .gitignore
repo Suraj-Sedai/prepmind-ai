@@ -1,6 +1,11 @@
 backend/.env
 backend/data/
 backend/uploads/
+
+# Python virtual environments
+.venv/
+venv/
+env/
 backend/.venv/
 backend/**/__pycache__/
 backend/**/*.pyc
@@ -8,4 +13,5 @@ backend/**/*.pyc
 frontend/node_modules/
 frontend/dist/
 .dist/
-/prompt
+/prompts
+backend/tests/

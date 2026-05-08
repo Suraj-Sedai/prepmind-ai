@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -14,7 +17,7 @@ class DocumentRead(BaseModel):
     file_size_bytes: int
     extracted_word_count: int
     topic_summary: str
-    error_message: str | None = None
+    error_message: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -67,6 +67,24 @@ def ensure_runtime_schema(engine: Engine) -> None:
         if "source_snippet" not in flashcard_columns:
             statements.append("ALTER TABLE flashcards ADD COLUMN source_snippet TEXT")
 
+    if "chat_threads" in table_names:
+        chat_thread_columns = {column["name"] for column in inspector.get_columns("chat_threads")}
+        if "course_name" not in chat_thread_columns:
+            statements.append("ALTER TABLE chat_threads ADD COLUMN course_name VARCHAR(120)")
+        if "document_id" not in chat_thread_columns:
+            statements.append("ALTER TABLE chat_threads ADD COLUMN document_id INTEGER")
+
+    if "chat_messages" in table_names:
+        chat_message_columns = {column["name"] for column in inspector.get_columns("chat_messages")}
+        if "answer_status" not in chat_message_columns:
+            statements.append("ALTER TABLE chat_messages ADD COLUMN answer_status VARCHAR(40)")
+        if "confidence_label" not in chat_message_columns:
+            statements.append("ALTER TABLE chat_messages ADD COLUMN confidence_label VARCHAR(20)")
+        if "used_general_ai" not in chat_message_columns:
+            statements.append("ALTER TABLE chat_messages ADD COLUMN used_general_ai BOOLEAN NOT NULL DEFAULT 0")
+        if "citations_json" not in chat_message_columns:
+            statements.append("ALTER TABLE chat_messages ADD COLUMN citations_json TEXT")
+
     if not statements:
         return
 

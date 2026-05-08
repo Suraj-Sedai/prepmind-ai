@@ -1,8 +1,11 @@
-import httpx
+from __future__ import annotations
+
+from typing import Optional
 
 from app.core.config import get_settings
 from app.models.document import DocumentChunk
 from app.rag.embeddings import EmbeddingProviderUnavailable
+from app.rag.llm import generate_model_text
 from app.rag.prompts import GENERAL_ANSWER_PROMPT, GROUNDED_ANSWER_PROMPT
 from app.rag.retrieval import evaluate_context_support, retrieve_relevant_chunks
 from app.rag.schemas import AnswerStatus, ConfidenceLabel
@@ -12,60 +15,11 @@ from app.schemas.study import AskResponse, CitationItem
 settings = get_settings()
 
 
-def _extract_gemini_text(payload: dict) -> str | None:
-    candidates = payload.get("candidates", [])
-    if not candidates:
-        return None
-    parts = candidates[0].get("content", {}).get("parts", [])
-    text = "\n".join(part.get("text", "") for part in parts if part.get("text")).strip()
-    return text or None
+def _generate_model_text(prompt: str) -> Optional[str]:
+    return generate_model_text(prompt)
 
 
-def _generate_with_gemini(prompt: str) -> str | None:
-    if not settings.gemini_api_key:
-        return None
-    response = httpx.post(
-        f"{settings.gemini_base_url}/models/{settings.gemini_chat_model}:generateContent",
-        headers={
-            "x-goog-api-key": settings.gemini_api_key,
-            "Content-Type": "application/json",
-        },
-        json={"contents": [{"role": "user", "parts": [{"text": prompt}]}]},
-        timeout=60.0,
-    )
-    response.raise_for_status()
-    return _extract_gemini_text(response.json())
-
-
-def _generate_with_openai(prompt: str) -> str | None:
-    if not settings.openai_api_key:
-        return None
-    response = httpx.post(
-        f"{settings.openai_base_url}/responses",
-        headers={
-            "Authorization": f"Bearer {settings.openai_api_key}",
-            "Content-Type": "application/json",
-        },
-        json={"model": settings.openai_chat_model, "input": prompt},
-        timeout=60.0,
-    )
-    response.raise_for_status()
-    payload = response.json()
-    return payload.get("output_text")
-
-
-def _generate_model_text(prompt: str) -> str | None:
-    for generator in (_generate_with_gemini, _generate_with_openai):
-        try:
-            text = generator(prompt)
-        except Exception:
-            continue
-        if text:
-            return text.strip().replace("\r\n", "\n")
-    return None
-
-
-def _page_or_slide(chunk: DocumentChunk) -> str | None:
+def _page_or_slide(chunk: DocumentChunk) -> Optional[str]:
     if chunk.page_start is not None and chunk.page_end is not None and chunk.page_start != chunk.page_end:
         return f"Pages {chunk.page_start}-{chunk.page_end}"
     if chunk.page_start is not None:
@@ -73,7 +27,7 @@ def _page_or_slide(chunk: DocumentChunk) -> str | None:
     return None
 
 
-def citation_from_chunk(chunk: DocumentChunk, snippet: str, relevance: float | None = None) -> CitationItem:
+def citation_from_chunk(chunk: DocumentChunk, snippet: str, relevance: Optional[float] = None) -> CitationItem:
     page_or_slide = _page_or_slide(chunk)
     return CitationItem(
         document_name=chunk.document.document_name,
@@ -159,7 +113,7 @@ def _missing_response(allow_general: bool, question: str) -> tuple[str, AnswerSt
     return answer, "general_ai_fallback", [source], "general", True
 
 
-def answer_question_with_rag(db, user_id: int, question: str, document_id: int | None = None) -> AskResponse:
+def answer_question_with_rag(db, user_id: int, question: str, document_id: Optional[int] = None) -> AskResponse:
     try:
         chunks = retrieve_relevant_chunks(db, user_id=user_id, question=question, document_id=document_id)
     except EmbeddingProviderUnavailable as exc:

@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.api.auth import router as auth_router
+from app.api.chat import router as chat_router
 from app.api.deps import ensure_storage_dirs
 from app.api.documents import router as documents_router
 from app.api.health import router as health_router
@@ -16,7 +20,7 @@ from app.core.config import get_settings
 from app.db.base import Base
 from app.db.bootstrap import ensure_runtime_schema
 from app.db.session import engine
-from app.models import document, study, user  # noqa: F401
+from app.models import chat, document, study, user  # noqa: F401
 
 settings = get_settings()
 
@@ -50,8 +54,10 @@ app.add_middleware(
 
 app.include_router(health_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
+app.include_router(chat_router, prefix="/api")
 app.include_router(documents_router, prefix="/api")
 app.include_router(study_router, prefix="/api")
+ensure_storage_dirs()
 app.mount("/media", StaticFiles(directory=settings.upload_path), name="media")
 
 frontend_dist = settings.frontend_dist_path
@@ -61,7 +67,7 @@ if frontend_assets.exists():
     app.mount("/assets", StaticFiles(directory=frontend_assets), name="frontend-assets")
 
 
-def _frontend_file(path_value: str) -> Path | None:
+def _frontend_file(path_value: str) -> Optional[Path]:
     candidate = frontend_dist / path_value
     if candidate.exists() and candidate.is_file():
         return candidate

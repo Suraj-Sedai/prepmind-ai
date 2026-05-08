@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 from pathlib import Path
+from typing import Optional
 
 from docx import Document as DocxDocument
 from pypdf import PdfReader
@@ -42,7 +45,7 @@ def _extract_text_file(path: Path) -> list[ExtractedTextUnit]:
 def _extract_docx(path: Path) -> list[ExtractedTextUnit]:
     document = DocxDocument(str(path))
     lines: list[str] = []
-    current_heading: str | None = None
+    current_heading: Optional[str] = None
 
     for paragraph in document.paragraphs:
         text = paragraph.text.strip()
@@ -75,4 +78,3 @@ def extract_text_units(path: Path) -> list[ExtractedTextUnit]:
     if suffix == ".docx":
         return _extract_docx(path)
     raise ValueError(f"Unsupported file type: {suffix}")
-

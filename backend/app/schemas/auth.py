@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -25,7 +27,7 @@ class UserRead(BaseModel):
     name: str
     email: EmailStr
     preferred_difficulty: str
-    profile_image_url: str | None = None
+    profile_image_url: Optional[str] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -38,4 +40,4 @@ class AuthResponse(BaseModel):
 
 class SessionState(BaseModel):
     authenticated: bool
-    user: UserRead | None = None
+    user: Optional[UserRead] = None

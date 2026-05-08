@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import hashlib
 import re
 from pathlib import Path
+from typing import Optional
 
 from app.rag.clean_text import clean_extracted_units, normalize_text
 from app.rag.extract_text import extract_text_units
@@ -19,7 +22,7 @@ def _looks_like_heading(line: str) -> bool:
     return 1 <= len(words) <= 12 and bool(HEADING_RE.match(stripped))
 
 
-def _section_heading(unit: ExtractedTextUnit) -> str | None:
+def _section_heading(unit: ExtractedTextUnit) -> Optional[str]:
     if unit.section_heading:
         return unit.section_heading[:180]
     for line in unit.cleaned_text.splitlines()[:8]:
@@ -47,12 +50,12 @@ def _chunk_words(text: str, words_per_chunk: int = 520, overlap: int = 80) -> li
     return chunks
 
 
-def _semantic_blocks(unit: ExtractedTextUnit) -> list[tuple[str | None, str]]:
+def _semantic_blocks(unit: ExtractedTextUnit) -> list[tuple[Optional[str], str]]:
     lines = [line for line in unit.cleaned_text.splitlines() if line.strip()]
     if not lines:
         return []
 
-    blocks: list[tuple[str | None, str]] = []
+    blocks: list[tuple[Optional[str], str]] = []
     current_heading = _section_heading(unit)
     current_lines: list[str] = []
 
@@ -131,4 +134,3 @@ def process_document(path: Path) -> ProcessedDocument:
         skipped_junk_count=skipped_junk_count,
         scanned_or_empty=bool(extracted_units) and not cleaned_text,
     )
-

@@ -1,9 +1,11 @@
+from __future__ import annotations
+
 import math
 import random
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 from itsdangerous import BadSignature, URLSafeSerializer
 from sqlalchemy import select
@@ -27,6 +29,7 @@ from app.schemas.study import (
     QuizSubmitResponse,
     QuestionOption,
 )
+from app.services.study_generation import generate_flashcards_with_ai, generate_quiz_with_ai
 
 STOPWORDS = {
     "about",
@@ -102,7 +105,7 @@ def _upsert_mastery(db: Session, user_id: int, topic_name: str, delta: float, st
     mastery.last_reviewed = datetime.utcnow()
 
 
-def answer_question(db: Session, user_id: int, question: str, document_id: int | None = None) -> AskResponse:
+def answer_question(db: Session, user_id: int, question: str, document_id: Optional[int] = None) -> AskResponse:
     response = answer_question_with_rag(db, user_id=user_id, question=question, document_id=document_id)
     if response.answer_status == "answered_from_documents":
         for source in response.sources:
@@ -121,12 +124,59 @@ def _difficulty_from_text(text: str) -> str:
     return "hard"
 
 
+def _flashcard_dedupe_key(topic_name: str, answer: str) -> str:
+    return f"{topic_name.strip().lower()}:{' '.join(answer.lower().split())}"
+
+
+def _persist_generated_flashcard(
+    db: Session,
+    user_id: int,
+    item: dict[str, Any],
+    seen_questions: set[str],
+) -> Optional[Flashcard]:
+    question = str(item["question"]).strip()
+    answer = str(item["answer"]).strip()
+    topic_name = str(item["topic_name"]).strip() or "General"
+    dedupe_key = _flashcard_dedupe_key(topic_name, answer)
+    if dedupe_key in seen_questions:
+        return None
+    seen_questions.add(dedupe_key)
+
+    existing = db.scalar(
+        select(Flashcard).where(
+            Flashcard.user_id == user_id,
+            Flashcard.topic_name == topic_name,
+            Flashcard.answer == answer,
+        )
+    )
+    if existing is not None:
+        existing.question = existing.question or question
+        existing.source_document_name = existing.source_document_name or item.get("source_document_name")
+        existing.source_page_start = existing.source_page_start or item.get("source_page_start")
+        existing.source_snippet = existing.source_snippet or item.get("source_snippet")
+        return existing
+
+    flashcard = Flashcard(
+        user_id=user_id,
+        topic_name=topic_name,
+        question=question,
+        answer=answer,
+        difficulty=str(item.get("difficulty") or "medium"),
+        source_document_name=item.get("source_document_name"),
+        source_page_start=item.get("source_page_start"),
+        source_snippet=item.get("source_snippet"),
+    )
+    db.add(flashcard)
+    db.flush()
+    return flashcard
+
+
 def generate_flashcards(
     db: Session,
     user_id: int,
     count: int,
     difficulty: str,
-    topic: str | None = None,
+    topic: Optional[str] = None,
 ) -> FlashcardGenerateResponse:
     chunks = retrieve_rag_chunks(
         db,
@@ -141,13 +191,26 @@ def generate_flashcards(
 
     created: list[Flashcard] = []
     seen_questions: set[str] = set()
+    ai_items = generate_flashcards_with_ai(chunks, count, difficulty, topic)
+    for item in ai_items:
+        flashcard = _persist_generated_flashcard(db, user_id, item, seen_questions)
+        if flashcard is None:
+            continue
+        created.append(flashcard)
+        _upsert_mastery(db, user_id, flashcard.topic_name, delta=0.8)
+        if len(created) >= count:
+            db.commit()
+            return FlashcardGenerateResponse(
+                message="AI flashcards generated successfully.",
+                items=[FlashcardItem.model_validate(card) for card in created[:count]],
+            )
 
     for chunk in chunks:
         for sentence in _sentence_split(chunk.chunk_text):
             prompt = f"What should you remember about {chunk.topic_label}?"
             answer = sentence[:320]
             card_difficulty = difficulty if difficulty != "medium" else _difficulty_from_text(sentence)
-            dedupe_key = f"{chunk.topic_label}:{answer}"
+            dedupe_key = _flashcard_dedupe_key(chunk.topic_label, answer)
             if dedupe_key in seen_questions:
                 continue
             seen_questions.add(dedupe_key)
@@ -194,7 +257,7 @@ def generate_flashcards(
     )
 
 
-def list_flashcards(db: Session, user_id: int, topic: str | None = None) -> FlashcardListResponse:
+def list_flashcards(db: Session, user_id: int, topic: Optional[str] = None) -> FlashcardListResponse:
     query = select(Flashcard).where(Flashcard.user_id == user_id).order_by(Flashcard.created_at.desc())
     if topic:
         query = query.where(Flashcard.topic_name == topic)
@@ -234,7 +297,7 @@ def _build_question(
     all_topics: list[str],
     difficulty: str,
     question_type: str,
-) -> QuizQuestion | None:
+) -> Optional[QuizQuestion]:
     if question_type == "multiple_choice":
         distractors = [label for label in all_topics if label != topic][:3]
         option_labels = [topic, *distractors]
@@ -242,7 +305,8 @@ def _build_question(
         options = [QuestionOption(id=str(index + 1), label=label) for index, label in enumerate(option_labels)]
         correct_answer = next(option.id for option in options if option.label == topic)
         prompt = f"Which topic best matches this study clue? {sentence}"
-        payload = {"type": question_type, "correct_answer": correct_answer, "topic_name": topic}
+        explanation = f"The clue comes from the uploaded material about {topic}."
+        payload = {"type": question_type, "correct_answer": correct_answer, "topic_name": topic, "explanation": explanation}
         return QuizQuestion(
             prompt=prompt,
             question_type="multiple_choice",
@@ -250,6 +314,7 @@ def _build_question(
             difficulty=difficulty,
             options=options,
             source_snippet=sentence,
+            explanation=explanation,
             answer_token=_sign_answer_payload(payload),
         )
 
@@ -261,7 +326,8 @@ def _build_question(
             correct_answer = "false"
         else:
             correct_answer = "true"
-        payload = {"type": question_type, "correct_answer": correct_answer, "topic_name": topic}
+        explanation = f"The statement should be checked against the source idea for {topic}."
+        payload = {"type": question_type, "correct_answer": correct_answer, "topic_name": topic, "explanation": explanation}
         return QuizQuestion(
             prompt=statement,
             question_type="true_false",
@@ -269,6 +335,7 @@ def _build_question(
             difficulty=difficulty,
             options=[QuestionOption(id="true", label="True"), QuestionOption(id="false", label="False")],
             source_snippet=sentence,
+            explanation=explanation,
             answer_token=_sign_answer_payload(payload),
         )
 
@@ -276,7 +343,8 @@ def _build_question(
         if topic.lower() not in sentence.lower():
             sentence = f"{topic} is a key idea from the uploaded material. {sentence}"
         blanked = re.sub(re.escape(topic), "_____", sentence, flags=re.IGNORECASE, count=1)
-        payload = {"type": question_type, "correct_answer": topic, "topic_name": topic}
+        explanation = f"The missing term is the topic connected to this source idea: {topic}."
+        payload = {"type": question_type, "correct_answer": topic, "topic_name": topic, "explanation": explanation}
         return QuizQuestion(
             prompt=f"Fill in the blank: {blanked}",
             question_type="fill_blank",
@@ -284,13 +352,21 @@ def _build_question(
             difficulty=difficulty,
             options=[],
             source_snippet=sentence,
+            explanation=explanation,
             answer_token=_sign_answer_payload(payload),
         )
 
     keywords = list(dict.fromkeys(_tokens(sentence)))[:4]
     if not keywords:
         return None
-    payload = {"type": "short_answer", "keywords": keywords, "topic_name": topic, "correct_answer": ", ".join(keywords)}
+    explanation = f"A strong answer should mention the core terms from the source: {', '.join(keywords)}."
+    payload = {
+        "type": "short_answer",
+        "keywords": keywords,
+        "topic_name": topic,
+        "correct_answer": ", ".join(keywords),
+        "explanation": explanation,
+    }
     return QuizQuestion(
         prompt=f"In one short phrase, describe an important idea about {topic}.",
         question_type="short_answer",
@@ -298,6 +374,33 @@ def _build_question(
         difficulty=difficulty,
         options=[],
         source_snippet=sentence,
+        explanation=explanation,
+        answer_token=_sign_answer_payload(payload),
+    )
+
+
+def _quiz_question_from_ai(item: dict[str, Any]) -> QuizQuestion:
+    question_type = str(item["question_type"])
+    correct_answer = str(item["correct_answer"])
+    explanation = str(item.get("explanation") or "Review the source snippet for this concept.")
+    payload = {
+        "type": question_type,
+        "correct_answer": correct_answer,
+        "topic_name": item["topic_name"],
+        "explanation": explanation,
+    }
+    if question_type == "short_answer":
+        payload["keywords"] = _tokens(correct_answer)
+    return QuizQuestion(
+        prompt=str(item["prompt"]),
+        question_type=question_type,  # type: ignore[arg-type]
+        topic_name=str(item["topic_name"]),
+        difficulty=str(item["difficulty"]),
+        options=[QuestionOption(**option) for option in item.get("options", [])],
+        source_snippet=str(item.get("source_snippet") or ""),
+        source_document_name=item.get("source_document_name"),
+        source_page_start=item.get("source_page_start"),
+        explanation=explanation,
         answer_token=_sign_answer_payload(payload),
     )
 
@@ -307,7 +410,7 @@ def generate_quiz(
     user_id: int,
     question_count: int,
     difficulty: str,
-    topic: str | None = None,
+    topic: Optional[str] = None,
 ) -> QuizGenerateResponse:
     chunks = retrieve_rag_chunks(
         db,
@@ -320,9 +423,19 @@ def generate_quiz(
     if not chunks:
         return QuizGenerateResponse(message="No indexed study material available yet.", questions=[])
 
-    all_topics = list(dict.fromkeys(chunk.topic_label for chunk in chunks))
     questions: list[QuizQuestion] = []
     seen_prompts: set[str] = set()
+    ai_items = generate_quiz_with_ai(chunks, question_count, difficulty, topic)
+    for item in ai_items:
+        question = _quiz_question_from_ai(item)
+        if question.prompt in seen_prompts:
+            continue
+        seen_prompts.add(question.prompt)
+        questions.append(question)
+        if len(questions) >= question_count:
+            return QuizGenerateResponse(message="AI quiz generated successfully.", questions=questions)
+
+    all_topics = list(dict.fromkeys(chunk.topic_label for chunk in chunks))
     chunk_sentences: list[tuple[DocumentChunk, str]] = []
     for chunk in chunks:
         sentences = _sentence_split(chunk.chunk_text) or [chunk.chunk_text[:320]]
@@ -345,22 +458,27 @@ def generate_quiz(
     return QuizGenerateResponse(message="Quiz generated successfully.", questions=questions)
 
 
-def _evaluate_submission(answer_token: str, student_answer: str) -> tuple[bool, str, str]:
+def _evaluate_submission(answer_token: str, student_answer: str) -> tuple[bool, str, str, str]:
     payload = _unsign_answer_payload(answer_token)
     question_type = payload["type"]
     normalized = student_answer.strip().lower()
+    explanation = str(payload.get("explanation") or "Review the source snippet for this concept.")
 
     if question_type in {"multiple_choice", "true_false", "fill_blank"}:
         correct = str(payload["correct_answer"]).strip().lower()
         is_correct = normalized == correct
-        feedback = "Correct." if is_correct else "Review the source snippet and retry this concept."
-        return is_correct, str(payload["correct_answer"]), feedback
+        feedback = "Correct." if is_correct else explanation
+        return is_correct, str(payload["correct_answer"]), feedback, explanation
 
     keywords = payload.get("keywords", [])
-    hits = sum(1 for keyword in keywords if keyword in normalized)
-    is_correct = hits >= max(1, math.ceil(len(keywords) / 2))
-    feedback = "Good recall." if is_correct else "Try mentioning the core idea or term more explicitly."
-    return is_correct, str(payload.get("correct_answer", "")), feedback
+    if keywords:
+        hits = sum(1 for keyword in keywords if keyword in normalized)
+        is_correct = hits >= max(1, math.ceil(len(keywords) / 2))
+    else:
+        correct_text = str(payload.get("correct_answer", "")).strip().lower()
+        is_correct = bool(correct_text and (normalized == correct_text or correct_text in normalized))
+    feedback = "Good recall." if is_correct else explanation
+    return is_correct, str(payload.get("correct_answer", "")), feedback, explanation
 
 
 def submit_quiz(db: Session, user_id: int, answers: list[dict[str, Any]]) -> QuizSubmitResponse:
@@ -378,7 +496,7 @@ def submit_quiz(db: Session, user_id: int, answers: list[dict[str, Any]]) -> Qui
     topic_stats: defaultdict[str, list[bool]] = defaultdict(list)
 
     for answer in answers:
-        is_correct, correct_answer, feedback = _evaluate_submission(answer["answer_token"], answer["student_answer"])
+        is_correct, correct_answer, feedback, explanation = _evaluate_submission(answer["answer_token"], answer["student_answer"])
         if is_correct:
             correct_count += 1
         topic_stats[answer["topic_name"]].append(is_correct)
@@ -403,6 +521,7 @@ def submit_quiz(db: Session, user_id: int, answers: list[dict[str, Any]]) -> Qui
                 correct_answer=correct_answer,
                 is_correct=is_correct,
                 feedback=feedback,
+                explanation=explanation,
             )
         )
 

@@ -1,23 +1,25 @@
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
 
 class CitationItem(BaseModel):
     document_name: str
-    file_name: str | None = None
+    file_name: Optional[str] = None
     topic_label: str
     snippet: str
-    page_start: int | None = None
-    page_end: int | None = None
-    page_or_slide: str | None = None
-    relevance: float | None = None
+    page_start: Optional[int] = None
+    page_end: Optional[int] = None
+    page_or_slide: Optional[str] = None
+    relevance: Optional[float] = None
 
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=4, max_length=500)
-    document_id: int | None = None
+    document_id: Optional[int] = None
 
 
 class AskResponse(BaseModel):
@@ -79,16 +81,16 @@ class FlashcardItem(BaseModel):
     question: str
     answer: str
     difficulty: str
-    student_rating: str | None = None
-    source_document_name: str | None = None
-    source_page_start: int | None = None
-    source_snippet: str | None = None
+    student_rating: Optional[str] = None
+    source_document_name: Optional[str] = None
+    source_page_start: Optional[int] = None
+    source_snippet: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
 
 class FlashcardGenerateRequest(BaseModel):
-    topic: str | None = None
+    topic: Optional[str] = None
     count: int = Field(default=6, ge=1, le=20)
     difficulty: Literal["easy", "medium", "hard"] = "medium"
 
@@ -118,13 +120,14 @@ class QuizQuestion(BaseModel):
     difficulty: str
     options: list[QuestionOption] = []
     source_snippet: str
-    source_document_name: str | None = None
-    source_page_start: int | None = None
+    source_document_name: Optional[str] = None
+    source_page_start: Optional[int] = None
+    explanation: Optional[str] = None
     answer_token: str
 
 
 class QuizGenerateRequest(BaseModel):
-    topic: str | None = None
+    topic: Optional[str] = None
     difficulty: Literal["easy", "medium", "hard"] = "medium"
     question_count: int = Field(default=5, ge=1, le=20)
 
@@ -154,6 +157,7 @@ class QuizResultItem(BaseModel):
     correct_answer: str
     is_correct: bool
     feedback: str
+    explanation: Optional[str] = None
 
 
 class QuizSubmitResponse(BaseModel):
