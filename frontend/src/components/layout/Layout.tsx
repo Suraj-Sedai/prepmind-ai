@@ -4,6 +4,7 @@ import type { IconName } from "../common/Icon";
 import { Sidebar } from "./Sidebar";
 import type { ViewKey } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import type { ResolvedTheme, ThemePreference } from "../../hooks/useThemePreference";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -12,8 +13,11 @@ interface LayoutProps {
   views: Array<{ key: ViewKey; label: string; icon: IconName }>;
   onRefresh: () => void;
   onLogout: () => void;
+  onThemeCycle: () => void;
   currentUser: { name: string; email: string } | null;
+  resolvedTheme: ResolvedTheme;
   status: "online" | "offline";
+  themePreference: ThemePreference;
 }
 
 const mobileViews: ViewKey[] = ["dashboard", "materials", "chat", "quizzes", "progress"];
@@ -31,8 +35,11 @@ export function Layout({
   views,
   onRefresh,
   onLogout,
+  onThemeCycle,
   currentUser,
+  resolvedTheme,
   status,
+  themePreference,
 }: LayoutProps) {
   const activeViewLabel = views.find((view) => view.key === activeView)?.label || "";
   const mobileNavViews = views.filter((view) => mobileViews.includes(view.key));
@@ -48,7 +55,13 @@ export function Layout({
         status={status}
       />
       <div className="main-wrapper">
-        <TopBar onRefresh={onRefresh} title={activeViewLabel} />
+        <TopBar
+          onRefresh={onRefresh}
+          onThemeCycle={onThemeCycle}
+          resolvedTheme={resolvedTheme}
+          themePreference={themePreference}
+          title={activeViewLabel}
+        />
         <main className="main-content">{children}</main>
       </div>
       <nav className="mobile-bottom-nav" aria-label="Mobile navigation">

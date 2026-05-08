@@ -84,6 +84,38 @@ class Settings(BaseSettings):
     def frontend_dist_path(self) -> Path:
         return Path(__file__).resolve().parents[3] / "frontend" / "dist"
 
+    @property
+    def is_production(self) -> bool:
+        return self.env.strip().lower() == "production"
+
+    @property
+    def uses_sqlite_database(self) -> bool:
+        return self.database_url.strip().lower().startswith("sqlite")
+
+    def persistence_warnings(self) -> list[str]:
+        if not self.is_production:
+            return []
+
+        warnings: list[str] = []
+        if self.uses_sqlite_database:
+            warnings.append(
+                "Production is using SQLite. Use a shared persistent database, such as Cloud SQL PostgreSQL, "
+                "or users may not see the same account data across devices or instances."
+            )
+
+        upload_path = Path(self.upload_dir)
+        upload_path_text = str(upload_path)
+        if (
+            not upload_path.is_absolute()
+            or upload_path_text.startswith(("/app", "/tmp", "/var/tmp"))
+            or not upload_path_text.startswith("/mnt")
+        ):
+            warnings.append(
+                "Production uploads are configured on local container storage. Use a durable mounted volume or "
+                "object storage path for uploaded materials."
+            )
+        return warnings
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -23,10 +24,13 @@ from app.db.session import engine
 from app.models import chat, document, study, user  # noqa: F401
 
 settings = get_settings()
+logger = logging.getLogger("prepmind.startup")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    for warning in settings.persistence_warnings():
+        logger.warning(warning)
     ensure_storage_dirs()
     Base.metadata.create_all(bind=engine)
     ensure_runtime_schema(engine)

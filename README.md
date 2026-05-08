@@ -93,6 +93,7 @@ The Vite dev server proxies `/api` requests to `http://127.0.0.1:8000`.
 ## Google Sign-In
 
 Google sign-in uses the same FastAPI session cookie as email/password login.
+The same verified Google account is linked by Google's stable `sub` value and normalized email, so it resolves to the same PrepMind user row on every device as long as all devices use the same backend database.
 
 Create a Google OAuth client of type `Web application`, then add these authorized redirect URIs:
 
@@ -136,3 +137,5 @@ The recommended production path is:
 - Cloud Run for the app
 - Cloud SQL for PostgreSQL for the database
 - Cloud Storage bucket mounts for uploads
+
+Cross-device data requires persistent shared storage. Do not use container-local SQLite for production users; each Cloud Run instance or redeploy can see a different local file. Set `PREPMIND_DATABASE_URL` to a shared database such as Cloud SQL PostgreSQL, and set `PREPMIND_UPLOAD_DIR` to a durable mounted upload path. The included `cloudbuild.yaml` is already structured for Cloud SQL plus a mounted Cloud Storage bucket.

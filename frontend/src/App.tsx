@@ -42,6 +42,8 @@ import { Icon } from "./components/common/Icon";
 import type { IconName } from "./components/common/Icon";
 import { Layout } from "./components/layout/Layout";
 import type { ViewKey } from "./components/layout/Sidebar";
+import { useThemePreference } from "./hooks/useThemePreference";
+import type { ThemePreference } from "./hooks/useThemePreference";
 
 type AuthMode = "login" | "register";
 type Difficulty = "easy" | "medium" | "hard";
@@ -93,6 +95,11 @@ const sampleWeakTopics = [
 
 const chatSuggestions = ["Summarize", "Explain Simply", "Make Flashcards", "Create Quiz"] as const;
 const supportedUploadExtensions = [".pdf", ".docx", ".txt", ".md"];
+const themeOptions: Array<{ key: ThemePreference; label: string; icon: IconName }> = [
+  { key: "light", label: "Light", icon: "sun" },
+  { key: "dark", label: "Dark", icon: "moon" },
+  { key: "system", label: "System", icon: "monitor" },
+];
 
 function formatDate(value: string) {
   return new Date(value).toLocaleDateString(undefined, {
@@ -293,6 +300,7 @@ function EmptyState({
 }
 
 function App() {
+  const { cyclePreference, preference: themePreference, resolvedTheme, setPreference: setThemePreference } = useThemePreference();
   const [sessionChecked, setSessionChecked] = useState(false);
   const [status, setStatus] = useState<"online" | "offline">("offline");
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -1718,6 +1726,28 @@ function App() {
 
           <article className="panel settings-card">
             <div className="section-heading">
+              <h2>Appearance</h2>
+              <p>Choose the interface theme for this device.</p>
+            </div>
+            <div className="theme-segment" aria-label="Theme preference">
+              {themeOptions.map((option) => (
+                <button
+                  aria-pressed={themePreference === option.key}
+                  className={themePreference === option.key ? "theme-option active" : "theme-option"}
+                  key={option.key}
+                  onClick={() => setThemePreference(option.key)}
+                  type="button"
+                >
+                  <Icon name={option.icon} />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+            <p className="helper-text">Active theme: {resolvedTheme}.</p>
+          </article>
+
+          <article className="panel settings-card">
+            <div className="section-heading">
               <h2>Notifications</h2>
               <p>Local UI preferences for reminders.</p>
             </div>
@@ -1821,8 +1851,11 @@ function App() {
       views={views}
       onRefresh={() => refreshWorkspace()}
       onLogout={handleLogout}
+      onThemeCycle={cyclePreference}
       currentUser={currentUser}
+      resolvedTheme={resolvedTheme}
       status={status}
+      themePreference={themePreference}
     >
       {activeView === "dashboard" ? renderDashboard() : null}
       {activeView === "materials" ? renderMaterials() : null}

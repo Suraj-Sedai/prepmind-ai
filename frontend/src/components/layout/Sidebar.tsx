@@ -45,10 +45,10 @@ export function Sidebar({ activeView, onViewChange, views, onLogout, currentUser
           </div>
           <div>
             <strong>{currentUser?.name || "Student"}</strong>
-            <span>Free Plan</span>
+            <span>{currentUser?.email || "Signed in"}</span>
           </div>
         </div>
-        <button className="logout-button" onClick={onLogout} type="button">
+        <button aria-label="Sign out" className="logout-button" onClick={onLogout} type="button">
           <Icon name="logout" />
           <span>Sign Out</span>
         </button>

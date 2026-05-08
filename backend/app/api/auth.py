@@ -9,7 +9,8 @@ from uuid import uuid4
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from fastapi.responses import RedirectResponse
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
@@ -24,6 +25,15 @@ settings = get_settings()
 ALLOWED_PROFILE_TYPES = {"image/jpeg": ".jpg", "image/png": ".png", "image/webp": ".webp"}
 MAX_PROFILE_IMAGE_BYTES = 5 * 1024 * 1024
 GOOGLE_SCOPES = "openid email profile"
+
+
+def normalize_email(email: str) -> str:
+    return email.strip().lower()
+
+
+def find_user_by_email(db: Session, email: str) -> Optional[User]:
+    normalized = normalize_email(email)
+    return db.scalar(select(User).where(func.lower(User.email) == normalized))
 
 
 def persist_session(request: Request, user: User) -> None:
@@ -66,17 +76,22 @@ def remove_existing_profile_image(relative_path: Optional[str]) -> None:
 
 @router.post("/register", response_model=AuthResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: UserCreate, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
-    existing = db.scalar(select(User).where(User.email == payload.email))
+    normalized_email = normalize_email(str(payload.email))
+    existing = find_user_by_email(db, normalized_email)
     if existing is not None:
         raise HTTPException(status_code=409, detail="An account with that email already exists.")
 
     user = User(
         name=payload.name,
-        email=str(payload.email),
+        email=normalized_email,
         password_hash=hash_password(payload.password),
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="An account with that email already exists.") from None
     db.refresh(user)
     persist_session(request, user)
     return AuthResponse(message="User registered successfully.", user=user)
@@ -84,7 +99,7 @@ def register(payload: UserCreate, request: Request, db: Session = Depends(get_db
 
 @router.post("/login", response_model=AuthResponse)
 def login(payload: UserLogin, request: Request, db: Session = Depends(get_db)) -> AuthResponse:
-    user = db.scalar(select(User).where(User.email == payload.email))
+    user = find_user_by_email(db, str(payload.email))
     if user is None or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
 
@@ -160,7 +175,7 @@ def google_callback(
         return frontend_redirect({"auth_error": "Could not reach Google login. Please try again."})
 
     google_sub = str(userinfo.get("sub") or "")
-    email = str(userinfo.get("email") or "").strip().lower()
+    email = normalize_email(str(userinfo.get("email") or ""))
     email_verified = userinfo.get("email_verified")
     if not google_sub or not email:
         return frontend_redirect({"auth_error": "Google account did not provide an email address."})
@@ -168,8 +183,12 @@ def google_callback(
         return frontend_redirect({"auth_error": "Google email must be verified before signing in."})
 
     user = db.scalar(select(User).where(User.google_sub == google_sub))
+    email_user = find_user_by_email(db, email)
+    if user is not None and email_user is not None and email_user.id != user.id:
+        return frontend_redirect({"auth_error": "This Google email is already linked to another PrepMind account."})
+
     if user is None:
-        user = db.scalar(select(User).where(User.email == email))
+        user = email_user
         if user is not None:
             if user.google_sub and user.google_sub != google_sub:
                 return frontend_redirect({"auth_error": "This email is already linked to another Google account."})
@@ -185,8 +204,17 @@ def google_callback(
                 google_sub=google_sub,
             )
             db.add(user)
+    else:
+        user.auth_provider = "google"
+        if user.email != email:
+            user.email = email
 
-    db.commit()
+    db.add(user)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return frontend_redirect({"auth_error": "This Google account could not be linked because the email is already in use."})
     db.refresh(user)
     persist_session(request, user)
     return frontend_redirect({"auth": "google"})

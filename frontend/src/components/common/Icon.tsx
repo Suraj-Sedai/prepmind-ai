@@ -7,6 +7,8 @@ export type IconName =
   | "cards"
   | "quiz"
   | "moon"
+  | "sun"
+  | "monitor"
   | "logout"
   | "refresh"
   | "file"
@@ -79,6 +81,26 @@ export function Icon({ name, style, className }: { name: IconName; style?: React
       ) : null}
       {name === "moon" ? (
         <path d="M16.5 4.2C15.8 4 15.1 3.9 14.3 3.9C9.8 3.9 6.1 7.6 6.1 12.1C6.1 16.6 9.8 20.3 14.3 20.3C17.9 20.3 21 18 22 14.8C21.2 15 20.5 15.1 19.7 15.1C15.2 15.1 11.5 11.4 11.5 6.9C11.5 5.9 11.7 5 12 4.2" {...stroke} />
+      ) : null}
+      {name === "sun" ? (
+        <>
+          <circle cx="12" cy="12" r="4" {...stroke} />
+          <path d="M12 2.75V5" {...stroke} />
+          <path d="M12 19V21.25" {...stroke} />
+          <path d="M4.4 4.4L6 6" {...stroke} />
+          <path d="M18 18L19.6 19.6" {...stroke} />
+          <path d="M2.75 12H5" {...stroke} />
+          <path d="M19 12H21.25" {...stroke} />
+          <path d="M4.4 19.6L6 18" {...stroke} />
+          <path d="M18 6L19.6 4.4" {...stroke} />
+        </>
+      ) : null}
+      {name === "monitor" ? (
+        <>
+          <rect x="3.5" y="4.5" width="17" height="12" rx="2" {...stroke} />
+          <path d="M9 20H15" {...stroke} />
+          <path d="M12 16.5V20" {...stroke} />
+        </>
       ) : null}
       {name === "logout" ? (
         <>
