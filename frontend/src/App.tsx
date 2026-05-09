@@ -1250,11 +1250,14 @@ function App() {
                   description={chatMessage || "Try asking PrepMind to summarize a chapter or explain a concept in simple words."}
                 />
               ) : null}
-              {chatMessages.map((message) =>
+              {chatMessages.map((message, index) =>
                 message.role === "user" ? (
-                  <article className="chat-bubble user" key={message.id}>
-                    <p>{message.content}</p>
-                  </article>
+                  <div key={message.id} style={{ display: "contents" }}>
+                    {index > 0 && <hr className="chat-rule" />}
+                    <article className="chat-bubble user">
+                      <p>{message.content}</p>
+                    </article>
+                  </div>
                 ) : (
                   <article className="chat-bubble assistant" key={message.id}>
                     <div className="assistant-header">
@@ -1283,6 +1286,7 @@ function App() {
               )}
               {pendingQuestion ? (
                 <div className="message-group">
+                  {chatMessages.length > 0 && <hr className="chat-rule" />}
                   <article className="chat-bubble user">
                     <p>{pendingQuestion}</p>
                   </article>
