@@ -1161,10 +1161,12 @@ svg {
 }
 
 .assistant-content {
-  display: grid;
-  gap: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px; /* Spacing between major paragraphs/blocks */
   color: var(--ai-response);
   font-weight: 500;
+  line-height: 1.6; /* Better readability for students */
 }
 
 .chat-rule {
@@ -1204,18 +1206,20 @@ svg {
 }
 
 .formatted-block {
-  display: grid;
-  gap: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px; /* Spacing between lines in the same paragraph block */
 }
 
 .formatted-list {
   margin: 0;
   padding-left: 22px;
   color: var(--secondary);
+  line-height: 1.6;
 }
 
 .formatted-list li {
-  margin: 4px 0;
+  margin: 6px 0; /* Additional spacing for list items */
 }
 
 .sources-line {
