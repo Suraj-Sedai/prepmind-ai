@@ -30,7 +30,7 @@ class Settings(BaseSettings):
         validation_alias=AliasChoices("PREPMIND_GEMINI_CHAT_MODEL", "GEMINI_CHAT_MODEL"),
     )
     gemini_embedding_model: str = Field(
-        default="embedding-001",
+        default="gemini-embedding-2",
         validation_alias=AliasChoices("PREPMIND_GEMINI_EMBEDDING_MODEL", "GEMINI_EMBEDDING_MODEL"),
     )
     gemini_api_key: Optional[str] = Field(
