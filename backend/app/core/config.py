@@ -26,11 +26,11 @@ class Settings(BaseSettings):
     max_upload_size_mb: int = 15
     gemini_base_url: str = "https://generativelanguage.googleapis.com/v1beta"
     gemini_chat_model: str = Field(
-        default="gemini-2.5-flash",
+        default="gemini-1.5-flash",
         validation_alias=AliasChoices("PREPMIND_GEMINI_CHAT_MODEL", "GEMINI_CHAT_MODEL"),
     )
     gemini_embedding_model: str = Field(
-        default="gemini-embedding-001",
+        default="embedding-001",
         validation_alias=AliasChoices("PREPMIND_GEMINI_EMBEDDING_MODEL", "GEMINI_EMBEDDING_MODEL"),
     )
     gemini_api_key: Optional[str] = Field(
