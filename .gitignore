@@ -15,3 +15,5 @@ frontend/dist/
 .dist/
 /prompts
 backend/tests/
+__pycache__/
+*.pyc
